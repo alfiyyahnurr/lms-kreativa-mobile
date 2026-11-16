@@ -16,6 +16,11 @@ import {
   HabitGroup,
   LeaderboardStudent,
   LeaderboardHouse,
+  HouseLeaderboardRow,
+  StudentRankRow,
+  HouseTopContributor,
+  PointsSummaryData,
+  PointsLedgerItem,
   Assignment,
   Quiz,
   ExamItem,
@@ -931,21 +936,52 @@ export const api = {
   announcements: {
     // GET {{baseUrl}}/api/announcements
     list: async (): Promise<Announcement[]> => {
-      return requestApi<Announcement[]>('/api/announcements', 'GET', undefined, [...ANNOUNCEMENTS_DATA]);
+      const rawList = await requestApi<any[]>('/api/announcements', 'GET', undefined, [...ANNOUNCEMENTS_DATA]);
+      if (!Array.isArray(rawList)) return [];
+
+      return rawList.map((item: any) => {
+        const isRead = Boolean(item.is_read ?? item.read);
+        let formattedDate = item.date;
+        if (!formattedDate && item.publish_at) {
+          try {
+            const d = new Date(item.publish_at);
+            if (!isNaN(d.getTime())) {
+              formattedDate = d.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              });
+            }
+          } catch {
+            formattedDate = String(item.publish_at).slice(0, 10);
+          }
+        }
+
+        return {
+          id: Number(item.id),
+          title: item.title || '',
+          content: item.content || '',
+          author: item.created_by_name || item.author || 'Admin',
+          date: formattedDate || 'Recent',
+          isNew: !isRead,
+          read: isRead,
+          publish_at: item.publish_at ?? null,
+          created_by_name: item.created_by_name ?? null,
+          is_read: isRead,
+          school_id: item.school_id,
+          course_id: item.course_id,
+        };
+      });
     },
 
     // POST {{baseUrl}}/api/announcements/{{announcementId}}/read
-    markRead: async (announcementId: number) => {
-      const target = ANNOUNCEMENTS_DATA.find((a) => a.id === announcementId);
-      if (target) {
-        target.read = true;
-        target.isNew = false;
-      }
-      return requestApi(`/api/announcements/${announcementId}/read`, 'POST', undefined, {
-        success: true,
-        announcementId,
-        read: true,
-      });
+    markRead: async (announcementId: number): Promise<{ success: boolean }> => {
+      return requestApi<{ success: boolean }>(
+        `/api/announcements/${announcementId}/read`,
+        'POST',
+        undefined,
+        { success: true }
+      );
     },
   },
 
@@ -1330,9 +1366,14 @@ export const api = {
   // ==========================================
   points: {
     // GET {{baseUrl}}/api/student/points/summary?academicYearId={{academicYearId}}&termId={{termId}}
-    getSummary: async (academicYearId: number = 7, termId: number = 1) => {
-      return requestApi(
-        `/api/student/points/summary?academicYearId=${academicYearId}&termId=${termId}`,
+    getSummary: async (academicYearId?: number, termId?: number): Promise<PointsSummaryData> => {
+      const params: string[] = [];
+      if (academicYearId) params.push(`academicYearId=${academicYearId}`);
+      if (termId) params.push(`termId=${termId}`);
+      const query = params.length > 0 ? `?${params.join('&')}` : '';
+
+      return requestApi<PointsSummaryData>(
+        `/api/student/points/summary${query}`,
         'GET',
         undefined,
         {
@@ -1340,32 +1381,20 @@ export const api = {
           discipline: STUDENT_PROFILE.disciplinePts,
           literacy: STUDENT_PROFILE.literacyPts,
           habits: STUDENT_PROFILE.habitsPts,
+          houseName: null,
+          className: null,
+          schoolLevel: 'high_school_igcse',
         }
       );
     },
 
     // GET {{baseUrl}}/api/student/points/history
-    getHistory: async () => {
-      return requestApi(
+    getHistory: async (): Promise<PointsLedgerItem[]> => {
+      return requestApi<PointsLedgerItem[]>(
         '/api/student/points/history',
         'GET',
         undefined,
-        [
-          {
-            id: 'pt_hist_1',
-            title: 'To Kill a Mockingbird',
-            date: 'October 22, 2026',
-            points: 3,
-            category: 'literacy',
-          },
-          {
-            id: 'pt_hist_2',
-            title: 'Habit full day (≥5 categories checked)',
-            date: 'October 14, 2026',
-            points: 2,
-            category: 'habits',
-          },
-        ]
+        []
       );
     },
   },
@@ -1374,40 +1403,91 @@ export const api = {
   // 19. LEADERBOARD
   // ==========================================
   leaderboard: {
-    // GET {{baseUrl}}/api/leaderboard/houses?academicYearId={{academicYearId}}&termId={{termId}}&houseId=
-    getHouses: async (academicYearId: number = 7, termId: number = 1): Promise<LeaderboardHouse[]> => {
-      return requestApi<LeaderboardHouse[]>(
-        `/api/leaderboard/houses?academicYearId=${academicYearId}&termId=${termId}`,
+    // GET {{baseUrl}}/api/leaderboard/houses?houseId=&academicYearId=&termId=
+    getHouses: async (
+      houseId?: number,
+      academicYearId?: number,
+      termId?: number
+    ): Promise<{
+      rows: HouseLeaderboardRow[];
+      myHouseId: number | null;
+      myHouseName: string | null;
+      contributors: HouseTopContributor[] | null;
+      academicYearId?: number;
+      termId?: number | null;
+    }> => {
+      const params: string[] = [];
+      if (houseId) params.push(`houseId=${houseId}`);
+      if (academicYearId) params.push(`academicYearId=${academicYearId}`);
+      if (termId) params.push(`termId=${termId}`);
+      const query = params.length > 0 ? `?${params.join('&')}` : '';
+
+      return requestApi<{
+        rows: HouseLeaderboardRow[];
+        myHouseId: number | null;
+        myHouseName: string | null;
+        contributors: HouseTopContributor[] | null;
+        academicYearId?: number;
+        termId?: number | null;
+      }>(
+        `/api/leaderboard/houses${query}`,
         'GET',
         undefined,
-        [...LEADERBOARD_HOUSES]
+        {
+          rows: [],
+          myHouseId: null,
+          myHouseName: null,
+          contributors: null,
+        }
       );
     },
 
     // GET {{baseUrl}}/api/leaderboard/class?classId={{classId}}&academicYearId={{academicYearId}}&termId={{termId}}
-    getClass: async (classId?: number, academicYearId?: number, termId?: number): Promise<any> => {
-      let query = '';
+    getClass: async (classId?: number, academicYearId?: number, termId?: number): Promise<{
+      rows: StudentRankRow[];
+      houseSummary: { house: string; member_count: number; total_points: number }[];
+      className: string | null;
+      myStudentId: number | null;
+      classId?: number;
+      termId?: number | null;
+    }> => {
       const params: string[] = [];
       if (classId) params.push(`classId=${classId}`);
       if (academicYearId) params.push(`academicYearId=${academicYearId}`);
       if (termId) params.push(`termId=${termId}`);
-      if (params.length > 0) query = `?${params.join('&')}`;
+      const query = params.length > 0 ? `?${params.join('&')}` : '';
 
       return requestApi<any>(
         `/api/leaderboard/class${query}`,
         'GET',
         undefined,
-        { rows: [], myStudentId: null, className: null }
+        { rows: [], houseSummary: [], myStudentId: null, className: null }
       );
     },
 
-    // GET {{baseUrl}}/api/leaderboard/jenjang?schoolLevel=high_school_igcse&academicYearId={{academicYearId}}&termId={{termId}}
-    getJenjang: async (schoolLevel: string = 'high_school_igcse', academicYearId: number = 7, termId: number = 1): Promise<LeaderboardStudent[]> => {
-      return requestApi<LeaderboardStudent[]>(
-        `/api/leaderboard/jenjang?schoolLevel=${encodeURIComponent(schoolLevel)}&academicYearId=${academicYearId}&termId=${termId}`,
+    // GET {{baseUrl}}/api/leaderboard/jenjang?schoolLevel=&academicYearId=&termId=
+    getJenjang: async (
+      schoolLevel?: string,
+      academicYearId?: number,
+      termId?: number
+    ): Promise<{
+      rows: StudentRankRow[];
+      schoolLevel: string;
+      myStudentId: number | null;
+      academicYearId?: number;
+      termId?: number | null;
+    }> => {
+      const params: string[] = [];
+      if (schoolLevel) params.push(`schoolLevel=${encodeURIComponent(schoolLevel)}`);
+      if (academicYearId) params.push(`academicYearId=${academicYearId}`);
+      if (termId) params.push(`termId=${termId}`);
+      const query = params.length > 0 ? `?${params.join('&')}` : '';
+
+      return requestApi<any>(
+        `/api/leaderboard/jenjang${query}`,
         'GET',
         undefined,
-        [...LEADERBOARD_JENJANG]
+        { rows: [], schoolLevel: 'high_school_igcse', myStudentId: null }
       );
     },
   },

@@ -1,11 +1,73 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import AppHeader from '../../components/navigation/AppHeader';
 import { FONTS, SHADOWS } from '../../constants/theme';
-import { useStudentData } from '../../context/StudentDataContext';
+import { api } from '../../services/api';
+import {
+  HouseLeaderboardRow,
+  StudentRankRow,
+  HouseTopContributor,
+  PointsSummaryData,
+  PointsLedgerItem,
+} from '../../types';
+
+// Web LMS Design Tokens (SEC_HS)
+const SEC_HS = {
+  navy: '#1B2D4F',
+  navyMid: '#2C4370',
+  navyLight: '#3D5A8A',
+  navyBg: '#EEF2F8',
+  teal: '#1A5F6E',
+  tealMid: '#2A7F91',
+  tealLight: '#E6F4F7',
+  amber: '#B8842A',
+  amberLight: '#FEF6DC',
+  green: '#2E7D52',
+  greenLight: '#E3F5EC',
+  greenDark: '#1E5C3A',
+  coral: '#C0506A',
+  lavender: '#6B5EA8',
+  cream: '#FAFAF8',
+  warm: '#F7F3EC',
+  border: '#E5E0D8',
+  white: '#FFFFFF',
+  text: '#1C1917',
+  muted: '#78716C',
+  red: '#B91C1C',
+  blue: '#2563EB',
+  blueLight: '#DBEAFE',
+} as const;
+
+// Official House Colors matching Web LMS (lib/sec-hs-theme.ts)
+const HOUSE_COLOR: Record<string, string> = {
+  Alexandria: SEC_HS.navy,
+  Medina: SEC_HS.teal,
+  Cordova: SEC_HS.amber,
+  Seville: SEC_HS.green,
+  Damascus: SEC_HS.coral,
+  Granada: SEC_HS.lavender,
+};
+
+function getHouseColor(name: string | null | undefined): string {
+  if (!name) return SEC_HS.muted;
+  return HOUSE_COLOR[name] ?? SEC_HS.muted;
+}
+
+const JENJANG_LABEL: Record<string, string> = {
+  lower_secondary: 'Lower Secondary',
+  high_school_igcse: 'IGCSE',
+  high_school_alevel: 'A Level',
+};
 
 export const LeaderboardScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'house' | 'jenjang' | 'class'>('house');
@@ -13,6 +75,27 @@ export const LeaderboardScreen: React.FC = () => {
   const route = useRoute<any>();
   const scrollRef = useRef<any>(null);
 
+  // Live Backend States
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [summary, setSummary] = useState<PointsSummaryData | null>(null);
+  const [houses, setHouses] = useState<HouseLeaderboardRow[]>([]);
+  const [myHouseId, setMyHouseId] = useState<number | null>(null);
+  const [myHouseName, setMyHouseName] = useState<string | null>(null);
+  const [selectedHouseId, setSelectedHouseId] = useState<number | null>(null);
+  const [contributors, setContributors] = useState<HouseTopContributor[]>([]);
+  const [loadingContrib, setLoadingContrib] = useState<boolean>(false);
+  const [jenjangRows, setJenjangRows] = useState<StudentRankRow[]>([]);
+  const [schoolLevel, setSchoolLevel] = useState<string>('high_school_igcse');
+  const [classRows, setClassRows] = useState<StudentRankRow[]>([]);
+  const [houseSummary, setHouseSummary] = useState<
+    { house: string; member_count: number; total_points: number }[]
+  >([]);
+  const [className, setClassName] = useState<string | null>(null);
+  const [myStudentId, setMyStudentId] = useState<number | null>(null);
+  const [history, setHistory] = useState<PointsLedgerItem[]>([]);
+
+  // Scroll to top on navigation/focus
   useFocusEffect(
     useCallback(() => {
       scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -41,18 +124,120 @@ export const LeaderboardScreen: React.FC = () => {
     }
   }, [route.params?.initialTab]);
 
-  const {
-    studentProfile,
-    pointsHistory,
-    classLeaderboard,
-    houseLeaderboard,
-    jenjangLeaderboard,
-  } = useStudentData();
+  // Load contributors for a selected house
+  const loadContributors = useCallback(async (houseId: number) => {
+    setSelectedHouseId(houseId);
+    setLoadingContrib(true);
+    try {
+      const res = await api.leaderboard.getHouses(houseId);
+      if (res && Array.isArray(res.contributors)) {
+        setContributors(res.contributors);
+      } else {
+        setContributors([]);
+      }
+    } catch (err: any) {
+      console.warn('[Contributors Load Error]', err?.message || err);
+    } finally {
+      setLoadingContrib(false);
+    }
+  }, []);
 
-  // Dynamic podium representation from top 3 students in classLeaderboard
-  const firstPlace = classLeaderboard[0];
-  const secondPlace = classLeaderboard[1];
-  const thirdPlace = classLeaderboard[2];
+  // Main data loader fetching all 5 endpoints in parallel
+  const loadLeaderboardData = useCallback(async () => {
+    try {
+      const [sumRes, housesRes, jenjangRes, classRes, histRes] = await Promise.all([
+        api.points.getSummary(),
+        api.leaderboard.getHouses(),
+        api.leaderboard.getJenjang(),
+        api.leaderboard.getClass(),
+        api.points.getHistory(),
+      ]);
+
+      if (sumRes) {
+        setSummary(sumRes);
+        if (sumRes.houseName) setMyHouseName(sumRes.houseName);
+        if (sumRes.className) setClassName(sumRes.className);
+        if (sumRes.schoolLevel) setSchoolLevel(sumRes.schoolLevel);
+      }
+
+      if (housesRes && Array.isArray(housesRes.rows)) {
+        setHouses(housesRes.rows);
+        if (housesRes.myHouseId != null) setMyHouseId(housesRes.myHouseId);
+        if (housesRes.myHouseName) setMyHouseName(housesRes.myHouseName);
+
+        const initialHouse = selectedHouseId ?? housesRes.myHouseId ?? housesRes.rows[0]?.house_id;
+        if (initialHouse) {
+          setSelectedHouseId(initialHouse);
+          if (housesRes.contributors && Array.isArray(housesRes.contributors)) {
+            setContributors(housesRes.contributors);
+          } else {
+            void loadContributors(initialHouse);
+          }
+        }
+      }
+
+      if (jenjangRes && Array.isArray(jenjangRes.rows)) {
+        setJenjangRows(jenjangRes.rows);
+        if (jenjangRes.schoolLevel) setSchoolLevel(jenjangRes.schoolLevel);
+        if (jenjangRes.myStudentId != null) setMyStudentId(jenjangRes.myStudentId);
+      }
+
+      if (classRes && Array.isArray(classRes.rows)) {
+        setClassRows(classRes.rows);
+        if (Array.isArray(classRes.houseSummary)) setHouseSummary(classRes.houseSummary);
+        if (classRes.className) setClassName(classRes.className);
+        if (classRes.myStudentId != null) setMyStudentId(classRes.myStudentId);
+      }
+
+      if (Array.isArray(histRes)) {
+        setHistory(histRes);
+      }
+    } catch (err: any) {
+      console.warn('[Leaderboard Load Error]', err?.message || err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedHouseId, loadContributors]);
+
+  // Initial load on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      loadLeaderboardData();
+    }, [loadLeaderboardData])
+  );
+
+  // Pure Pull-to-Refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadLeaderboardData();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadLeaderboardData]);
+
+  // Dynamic podium top 3 from classRows
+  const firstPlace = classRows[0];
+  const secondPlace = classRows[1];
+  const thirdPlace = classRows[2];
+
+  // Leading class house summary
+  const leadingClassHouse = houseSummary[0];
+
+  // Maximum house points for progress bar
+  const maxHousePoints = useMemo(() => {
+    if (houses.length === 0) return 10;
+    return Math.max(...houses.map((h) => h.total_points), 10);
+  }, [houses]);
+
+  // Selected house details
+  const selectedHouse = useMemo(() => {
+    return houses.find((h) => h.house_id === selectedHouseId);
+  }, [houses, selectedHouseId]);
+
+  const displayTotal = summary?.total ?? 0;
+  const displayHouse = summary?.houseName ?? myHouseName;
+  const currentLevelLabel = JENJANG_LABEL[schoolLevel] || schoolLevel || 'IGCSE';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -63,32 +248,53 @@ export const LeaderboardScreen: React.FC = () => {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[SEC_HS.navy]}
+            tintColor={SEC_HS.navy}
+          />
+        }
       >
-        {/* Header Title matching Screenshot 105848 */}
+        {/* Header Title matching Web LMS */}
         <View style={styles.headerBox}>
           <Text style={styles.pageTitle}>Leaderboard</Text>
-          <Text style={styles.pageSubtitle}>IGCSE</Text>
+          <Text style={styles.pageSubtitle}>
+            {myHouseName ? `House ${myHouseName} · ${currentLevelLabel}` : currentLevelLabel}
+          </Text>
         </View>
 
-        {/* Top Individual Points Card matching Screenshot 105848 */}
+        {/* Top Individual Points Card matching Web LMS */}
         <View style={styles.pointsCard}>
           <Text style={styles.pointsBigText}>
-            +<Text style={styles.pointsConsolasNumberBig}>{studentProfile.points}</Text>
+            {displayTotal >= 0 ? '+' : ''}
+            <Text style={styles.pointsConsolasNumberBig}>{displayTotal}</Text>
           </Text>
-          <Text style={styles.pointsLabel}>individual points</Text>
-          <Text style={styles.pointsSubDetail}>
-            <Text style={styles.pointsCategoryLabelD}>D </Text>
-            <Text style={[styles.pointsConsolasNumber, styles.pointsCategoryNumD]}>{studentProfile.disciplinePts}</Text>
-            <Text style={styles.pointsSubDetailDot}>  ·  </Text>
-            <Text style={styles.pointsCategoryLabelL}>L </Text>
-            <Text style={[styles.pointsConsolasNumber, styles.pointsCategoryNumL]}>{studentProfile.literacyPts}</Text>
-            <Text style={styles.pointsSubDetailDot}>  ·  </Text>
-            <Text style={styles.pointsCategoryLabelH}>H </Text>
-            <Text style={[styles.pointsConsolasNumber, styles.pointsCategoryNumH]}>{studentProfile.habitsPts}</Text>
+          <Text style={styles.pointsLabel}>
+            individual points{displayHouse ? ` · House ${displayHouse}` : ''}
           </Text>
+          {summary ? (
+            <Text style={styles.pointsSubDetail}>
+              <Text style={styles.pointsCategoryLabelD}>D </Text>
+              <Text style={[styles.pointsConsolasNumber, styles.pointsCategoryNumD]}>
+                {summary.discipline || 0}
+              </Text>
+              <Text style={styles.pointsSubDetailDot}>  ·  </Text>
+              <Text style={styles.pointsCategoryLabelL}>L </Text>
+              <Text style={[styles.pointsConsolasNumber, styles.pointsCategoryNumL]}>
+                {summary.literacy || 0}
+              </Text>
+              <Text style={styles.pointsSubDetailDot}>  ·  </Text>
+              <Text style={styles.pointsCategoryLabelH}>H </Text>
+              <Text style={[styles.pointsConsolasNumber, styles.pointsCategoryNumH]}>
+                {summary.habits || 0}
+              </Text>
+            </Text>
+          ) : null}
         </View>
 
-        {/* Tabs Row matching Screenshot 105829/105848 */}
+        {/* Tabs Row matching Web LMS */}
         <View style={styles.tabsRow}>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'house' && styles.tabButtonActive]}
@@ -121,305 +327,447 @@ export const LeaderboardScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={SEC_HS.navy} />
+            <Text style={styles.loadingText}>Loading leaderboard...</Text>
+          </View>
+        ) : null}
+
         {/* TAB 1: HOUSE */}
-        {activeTab === 'house' && (
+        {activeTab === 'house' && !loading && (
           <View style={styles.tabContentContainer}>
-            <View style={styles.houseList}>
-              {houseLeaderboard.map((house) => {
-                const maxHousePoints = Math.max(...houseLeaderboard.map((h) => h.points), 10);
-                const hasPoints = house.points > 0;
-                const fillWidth = hasPoints
-                  ? `${Math.min(100, Math.max(6, (house.points / maxHousePoints) * 100))}%`
-                  : '0%';
+            {houses.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>No house points yet.</Text>
+              </View>
+            ) : (
+              <View style={styles.houseList}>
+                {houses.map((house, idx) => {
+                  const isMine = myHouseId != null && house.house_id === myHouseId;
+                  const isSelected = selectedHouseId === house.house_id;
+                  const houseColorVal = getHouseColor(house.house);
+                  const pct = Math.max(4, Math.round((house.total_points / maxHousePoints) * 100));
 
-                return (
-                  <View key={house.name} style={styles.houseCard}>
-                    {/* Top Line */}
-                    <View style={styles.houseHeaderRow}>
-                      <View style={styles.houseLeftGroup}>
-                        <Text style={styles.houseRank}>#{house.rank}</Text>
-                        <View style={[styles.houseDot, { backgroundColor: house.color }]} />
-                        <Text style={styles.houseName}>{house.name}</Text>
+                  return (
+                    <TouchableOpacity
+                      key={house.house_id || house.house}
+                      style={[
+                        styles.houseCard,
+                        isMine && styles.houseCardMine,
+                        isSelected && !isMine && styles.houseCardSelected,
+                      ]}
+                      onPress={() => loadContributors(house.house_id)}
+                      activeOpacity={0.7}
+                    >
+                      {/* Top Line */}
+                      <View style={styles.houseHeaderRow}>
+                        <View style={styles.houseLeftGroup}>
+                          <Text style={styles.houseRank}>#{idx + 1}</Text>
+                          <View
+                            style={[styles.houseDot, { backgroundColor: houseColorVal }]}
+                          />
+                          <Text
+                            style={[
+                              styles.houseName,
+                              isMine && { color: SEC_HS.navy },
+                            ]}
+                          >
+                            {house.house}
+                            {isMine ? ' (you)' : ''}
+                          </Text>
+                        </View>
+                        <Text style={styles.housePoints}>
+                          <Text style={styles.pointsConsolasNumber}>{house.total_points}</Text> pts
+                        </Text>
                       </View>
-                      <Text style={styles.housePoints}>
-                        <Text style={styles.pointsConsolasNumber}>{house.points}</Text> pts
-                      </Text>
-                    </View>
 
-                    {/* Progress Track matching screenshot: circular dot indicator at start position for 0 pts, or dynamic fill if > 0 */}
-                    <View style={styles.progressTrack}>
-                      {hasPoints ? (
+                      {/* Progress Track */}
+                      <View style={styles.progressTrack}>
                         <View
                           style={[
                             styles.progressFill,
                             {
-                              backgroundColor: house.color,
-                              width: `${Math.min(100, Math.max(10, (house.points / maxHousePoints) * 100))}%`,
+                              backgroundColor: houseColorVal,
+                              width: `${pct}%`,
                             },
                           ]}
                         />
-                      ) : (
-                        <View
-                          style={[
-                            styles.progressDotZero,
-                            { backgroundColor: house.color },
-                          ]}
-                        />
-                      )}
-                    </View>
+                      </View>
 
-                    {/* Bottom Stats matching Screenshot: 0 members  ·  D 0  L 0  H 0 */}
-                    <Text style={styles.houseMembersText}>
-                      {house.members} members  ·  D <Text style={styles.pointsConsolasNumber}>{house.disciplinePts ?? 0}</Text>  L <Text style={styles.pointsConsolasNumber}>{house.literacyPts ?? 0}</Text>  H <Text style={styles.pointsConsolasNumber}>{house.habitsPts ?? 0}</Text>
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* My points history Card matching Screenshot */}
-            <View style={styles.historyCard}>
-              <Text style={styles.historyTitle}>My points history</Text>
-              {pointsHistory.length > 0 ? (
-                pointsHistory.map((item, index) => {
-                  const isLast = index === pointsHistory.length - 1;
-                  return (
-                    <View
-                      key={item.id}
-                      style={[styles.historyRow, isLast && styles.historyRowLast]}
-                    >
-                      <Text style={styles.historyItemTitle} numberOfLines={1}>
-                        {item.title}
+                      {/* Bottom Stats Breakdown matching Web LMS */}
+                      <Text style={styles.houseMembersText}>
+                        {house.active_members} members  ·  D{' '}
+                        <Text style={styles.pointsConsolasNumber}>{house.discipline_pts || 0}</Text>  L{' '}
+                        <Text style={styles.pointsConsolasNumber}>{house.literacy_pts || 0}</Text>  H{' '}
+                        <Text style={styles.pointsConsolasNumber}>{house.habits_pts || 0}</Text>
                       </Text>
-                      <Text style={styles.historyPointsBadge}>
-                        +{item.points}
-                      </Text>
-                    </View>
+                    </TouchableOpacity>
                   );
-                })
-              ) : (
-                <Text style={styles.historyEmptyText}>No points entries yet.</Text>
-              )}
-            </View>
+                })}
+              </View>
+            )}
+
+            {/* Top Contributors Card for Selected House matching Web LMS */}
+            {selectedHouseId ? (
+              <View style={styles.contributorsCard}>
+                <Text style={styles.contributorsTitle}>
+                  Top contributors{loadingContrib ? '…' : ''} · {selectedHouse?.house || 'House'}
+                </Text>
+                {contributors.length === 0 && !loadingContrib ? (
+                  <Text style={styles.contributorsEmptyText}>
+                    Tap a house to load top contributors, or no points yet.
+                  </Text>
+                ) : (
+                  <View style={styles.contributorsList}>
+                    {contributors.map((c) => (
+                      <View key={c.student_id} style={styles.contributorRow}>
+                        <View style={styles.contributorLeft}>
+                          <Text style={styles.contributorRank}>#{c.rank}</Text>
+                          <Text style={styles.contributorName} numberOfLines={1}>
+                            {c.full_name}
+                          </Text>
+                          {c.class_name ? (
+                            <Text style={styles.contributorClass}> · {c.class_name}</Text>
+                          ) : null}
+                        </View>
+                        <Text style={styles.contributorPoints}>{c.total_points}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ) : null}
           </View>
         )}
 
         {/* TAB 2: JENJANG */}
-        {activeTab === 'jenjang' && (
+        {activeTab === 'jenjang' && !loading && (
           <View style={styles.tabContentContainer}>
-            <Text style={styles.sectionSubtitle}>Ranking · IGCSE</Text>
+            <Text style={styles.sectionSubtitle}>Ranking · {currentLevelLabel}</Text>
 
-            <View style={styles.tableCard}>
-              {/* Table Header */}
-              <View style={styles.tableHeaderRow}>
-                <Text style={[styles.thCell, styles.colJenjangRank]}>Rank</Text>
-                <Text style={[styles.thCell, styles.colJenjangName]}>Name</Text>
-                <Text style={[styles.thCell, styles.colJenjangClass]}>Class</Text>
-                <Text style={[styles.thCell, styles.colJenjangHouse]}>House</Text>
-                <Text style={[styles.thCell, styles.colJenjangPoints]}>Points</Text>
+            {jenjangRows.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>No jenjang rankings yet.</Text>
               </View>
+            ) : (
+              <View style={styles.tableCard}>
+                {/* Table Header */}
+                <View style={styles.tableHeaderRow}>
+                  <Text style={[styles.thCell, styles.colJenjangRank]}>Rank</Text>
+                  <Text style={[styles.thCell, styles.colJenjangName]}>Name</Text>
+                  <Text style={[styles.thCell, styles.colJenjangClass]}>Class</Text>
+                  <Text style={[styles.thCell, styles.colJenjangHouse]}>House</Text>
+                  <Text style={[styles.thCell, styles.colJenjangPoints]}>Points</Text>
+                </View>
 
-              {/* Table Rows */}
-              {jenjangLeaderboard.map((item) => {
-                const isYou = item.isCurrent || item.name.includes('(you)');
-                const displayName = isYou ? item.name.replace(' (you)', '') : item.name;
-                const disciplineVal = isYou ? studentProfile.disciplinePts : (item.disciplinePts ?? 0);
-                const literacyVal = isYou ? studentProfile.literacyPts : (item.literacyPts ?? 0);
-                const habitsVal = isYou ? studentProfile.habitsPts : (item.habitsPts ?? 0);
-                const totalPointsVal = isYou ? studentProfile.points : item.points;
+                {/* Table Rows */}
+                {jenjangRows.map((item) => {
+                  const isYou = myStudentId != null && item.student_id === myStudentId;
+                  const houseColorVal = getHouseColor(item.house);
 
-                return (
-                  <View
-                    key={item.name}
-                    style={[styles.tableRow, isYou && styles.tableRowHighlight]}
-                  >
-                    <Text style={[styles.tdRank, styles.colJenjangRank, isYou && styles.textHighlight]}>
-                      #{item.rank}
-                    </Text>
-                    <View style={[styles.colJenjangName, styles.nameCellWrapper]}>
-                      <View style={styles.nameRowInline}>
-                        <Text
-                          style={[styles.tdNameText, isYou && styles.textHighlight]}
-                          numberOfLines={1}
-                        >
-                          {displayName}
-                        </Text>
-                        {isYou && (
-                          <Text style={styles.youInlineText}>(you)</Text>
+                  return (
+                    <View
+                      key={item.student_id}
+                      style={[styles.tableRow, isYou && styles.tableRowHighlight]}
+                    >
+                      <Text
+                        style={[
+                          styles.tdRank,
+                          styles.colJenjangRank,
+                          isYou && styles.textHighlight,
+                        ]}
+                      >
+                        #{item.rank}
+                      </Text>
+                      <View style={[styles.colJenjangName, styles.nameCellWrapper]}>
+                        <View style={styles.nameRowInline}>
+                          <Text
+                            style={[styles.tdNameText, isYou && styles.textHighlight]}
+                            numberOfLines={1}
+                          >
+                            {item.full_name}
+                          </Text>
+                          {isYou && <Text style={styles.youInlineText}>(you)</Text>}
+                        </View>
+
+                        {/* D, L, H breakdown badges */}
+                        {(item.discipline_pts !== 0 ||
+                          item.literacy_pts !== 0 ||
+                          item.habits_pts !== 0) && (
+                          <View style={styles.categoryPillsRow}>
+                            {item.discipline_pts !== 0 && (
+                              <View style={styles.categoryPillDiscipline}>
+                                <Text style={styles.categoryPillDisciplineText}>
+                                  D {item.discipline_pts}
+                                </Text>
+                              </View>
+                            )}
+                            {item.literacy_pts !== 0 && (
+                              <View style={styles.categoryPillLiteracy}>
+                                <Text style={styles.categoryPillLiteracyText}>
+                                  L {item.literacy_pts}
+                                </Text>
+                              </View>
+                            )}
+                            {item.habits_pts !== 0 && (
+                              <View style={styles.categoryPillHabits}>
+                                <Text style={styles.categoryPillHabitsText}>
+                                  H {item.habits_pts}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
                         )}
                       </View>
-
-                      {/* Dynamic D, L, H breakdown badges with distinct dashboard colors */}
-                      {(disciplineVal > 0 || literacyVal > 0 || habitsVal > 0) && (
-                        <View style={styles.categoryPillsRow}>
-                          {disciplineVal > 0 && (
-                            <View style={styles.categoryPillDiscipline}>
-                              <Text style={styles.categoryPillDisciplineText}>D {disciplineVal}</Text>
-                            </View>
-                          )}
-                          {literacyVal > 0 && (
-                            <View style={styles.categoryPillLiteracy}>
-                              <Text style={styles.categoryPillLiteracyText}>L {literacyVal}</Text>
-                            </View>
-                          )}
-                          {habitsVal > 0 && (
-                            <View style={styles.categoryPillHabits}>
-                              <Text style={styles.categoryPillHabitsText}>H {habitsVal}</Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
+                      <Text style={[styles.tdClass, styles.colJenjangClass]}>
+                        {item.class_name ?? '—'}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.tdHouse,
+                          styles.colJenjangHouse,
+                          { color: houseColorVal },
+                        ]}
+                      >
+                        {item.house ?? '—'}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.tdPoints,
+                          styles.colJenjangPoints,
+                          isYou && styles.textHighlight,
+                          { fontFamily: FONTS.consolas },
+                        ]}
+                      >
+                        {item.total_points}
+                      </Text>
                     </View>
-                    <Text style={[styles.tdClass, styles.colJenjangClass]}>{item.class}</Text>
-                    <Text
-                      style={[
-                        styles.tdHouse,
-                        styles.colJenjangHouse,
-                        item.house !== '—' && styles.tdHouseColored,
-                      ]}
-                    >
-                      {item.house}
-                    </Text>
-                    <Text style={[styles.tdPoints, styles.colJenjangPoints, isYou && styles.textHighlight, { fontFamily: FONTS.consolas }]}>
-                      {totalPointsVal}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
         )}
 
         {/* TAB 3: CLASS (PODIUM + TABLE) */}
-        {activeTab === 'class' && (
+        {activeTab === 'class' && !loading && (
           <View style={styles.tabContentContainer}>
-            <Text style={styles.classHeaderTitle}>Class S4 Oxford</Text>
-            <Text style={styles.classHeaderSub}>
-              Unassigned leads in this class with {studentProfile.points} pts from 15 members
+            <Text style={styles.classHeaderTitle}>
+              {className ? `Class ${className}` : 'My class'}
             </Text>
+            {leadingClassHouse ? (
+              <Text style={styles.classHeaderSub}>
+                {leadingClassHouse.house} leads in this class with{' '}
+                {leadingClassHouse.total_points} pts from {leadingClassHouse.member_count} members
+              </Text>
+            ) : (
+              <Text style={styles.classHeaderSub}>
+                Ranking of students in your class
+              </Text>
+            )}
 
-            {/* Dynamic Podium Graphics matching Screenshot 2 */}
-            <View style={styles.podiumContainer}>
-              {/* 2nd Place (Left) */}
-              <View style={styles.podiumCol}>
-                <View style={styles.medalCircle}>
-                  <Text style={styles.medalIcon}>🥈</Text>
-                </View>
-                <Text style={styles.podiumStudentName} numberOfLines={1}>
-                  {secondPlace ? secondPlace.name.replace(' (you)', '') : '—'}
-                </Text>
-                <Text style={styles.podiumPts}>
-                  {secondPlace ? (secondPlace.isCurrent ? studentProfile.points : secondPlace.points) : 0}
-                </Text>
-                <View style={[styles.podiumPedestal, { height: 95 }]} />
-              </View>
-
-              {/* 1st Place (Center - Tallest) */}
-              <View style={styles.podiumCol}>
-                <View style={styles.medalCircle}>
-                  <Text style={styles.medalIcon}>🥇</Text>
-                </View>
-                <Text style={styles.podiumStudentName} numberOfLines={1}>
-                  {firstPlace ? firstPlace.name.replace(' (you)', '') : '—'}
-                </Text>
-                <Text style={styles.podiumPts}>
-                  {firstPlace ? (firstPlace.isCurrent ? studentProfile.points : firstPlace.points) : 0}
-                </Text>
-                <View style={[styles.podiumPedestal, { height: 125 }]} />
-              </View>
-
-              {/* 3rd Place (Right - Shortest) */}
-              <View style={styles.podiumCol}>
-                <View style={styles.medalCircle}>
-                  <Text style={styles.medalIcon}>🥉</Text>
-                </View>
-                <Text style={styles.podiumStudentName} numberOfLines={1}>
-                  {thirdPlace ? thirdPlace.name.replace(' (you)', '') : '—'}
-                </Text>
-                <Text style={styles.podiumPts}>
-                  {thirdPlace ? (thirdPlace.isCurrent ? studentProfile.points : thirdPlace.points) : 0}
-                </Text>
-                <View style={[styles.podiumPedestal, { height: 75 }]} />
-              </View>
-            </View>
-
-            {/* Table below podium matching Screenshot 2 */}
-            <View style={styles.tableCard}>
-              {/* Table Header */}
-              <View style={styles.tableHeaderRow}>
-                <Text style={[styles.thCell, styles.colClassRank]}>Rank</Text>
-                <Text style={[styles.thCell, styles.colClassName]}>Name</Text>
-                <Text style={[styles.thCell, styles.colClassHouse]}>House</Text>
-                <Text style={[styles.thCell, styles.colClassPoints]}>Points</Text>
-              </View>
-
-              {/* Table Rows with dynamic class leaderboard */}
-              {classLeaderboard.map((item) => {
-                const isYou = item.isCurrent || item.name.includes('(you)');
-                const displayName = isYou ? item.name.replace(' (you)', '') : item.name;
-                const disciplineVal = isYou ? studentProfile.disciplinePts : (item.disciplinePts ?? 0);
-                const literacyVal = isYou ? studentProfile.literacyPts : (item.literacyPts ?? 0);
-                const habitsVal = isYou ? studentProfile.habitsPts : (item.habitsPts ?? 0);
-                const totalPointsVal = isYou ? studentProfile.points : item.points;
-
-                return (
+            {/* Dynamic Podium Graphics matching Web LMS */}
+            {classRows.length > 0 ? (
+              <View style={styles.podiumContainer}>
+                {/* 2nd Place (Left) */}
+                <View style={styles.podiumCol}>
+                  <View style={styles.medalCircle}>
+                    <Text style={styles.medalIcon}>🥈</Text>
+                  </View>
+                  <Text style={styles.podiumStudentName} numberOfLines={1}>
+                    {secondPlace ? secondPlace.full_name : '—'}
+                  </Text>
+                  <Text style={styles.podiumPts}>
+                    {secondPlace ? secondPlace.total_points : 0}
+                  </Text>
                   <View
-                    key={item.name}
-                    style={[styles.tableRow, isYou && styles.tableRowHighlight]}
-                  >
-                    <Text style={[styles.tdRank, styles.colClassRank, isYou && styles.textHighlight]}>
-                      #{item.rank}
-                    </Text>
-                    <View style={[styles.colClassName, styles.nameCellWrapper]}>
-                      <View style={styles.nameRowInline}>
-                        <Text
-                          style={[styles.tdNameText, isYou && styles.textHighlight]}
-                          numberOfLines={1}
-                        >
-                          {displayName}
-                        </Text>
-                        {isYou && (
-                          <Text style={styles.youInlineText}>(you)</Text>
+                    style={[
+                      styles.podiumPedestal,
+                      { height: 95 },
+                      secondPlace && myStudentId === secondPlace.student_id && styles.podiumPedestalMine,
+                    ]}
+                  />
+                </View>
+
+                {/* 1st Place (Center - Tallest) */}
+                <View style={styles.podiumCol}>
+                  <View style={styles.medalCircle}>
+                    <Text style={styles.medalIcon}>🥇</Text>
+                  </View>
+                  <Text style={styles.podiumStudentName} numberOfLines={1}>
+                    {firstPlace ? firstPlace.full_name : '—'}
+                  </Text>
+                  <Text style={styles.podiumPts}>
+                    {firstPlace ? firstPlace.total_points : 0}
+                  </Text>
+                  <View
+                    style={[
+                      styles.podiumPedestal,
+                      { height: 125 },
+                      firstPlace && myStudentId === firstPlace.student_id && styles.podiumPedestalMine,
+                    ]}
+                  />
+                </View>
+
+                {/* 3rd Place (Right - Shortest) */}
+                <View style={styles.podiumCol}>
+                  <View style={styles.medalCircle}>
+                    <Text style={styles.medalIcon}>🥉</Text>
+                  </View>
+                  <Text style={styles.podiumStudentName} numberOfLines={1}>
+                    {thirdPlace ? thirdPlace.full_name : '—'}
+                  </Text>
+                  <Text style={styles.podiumPts}>
+                    {thirdPlace ? thirdPlace.total_points : 0}
+                  </Text>
+                  <View
+                    style={[
+                      styles.podiumPedestal,
+                      { height: 75 },
+                      thirdPlace && myStudentId === thirdPlace.student_id && styles.podiumPedestalMine,
+                    ]}
+                  />
+                </View>
+              </View>
+            ) : null}
+
+            {/* Table below podium matching Web LMS */}
+            {classRows.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>No class rankings yet.</Text>
+              </View>
+            ) : (
+              <View style={styles.tableCard}>
+                {/* Table Header */}
+                <View style={styles.tableHeaderRow}>
+                  <Text style={[styles.thCell, styles.colClassRank]}>Rank</Text>
+                  <Text style={[styles.thCell, styles.colClassName]}>Name</Text>
+                  <Text style={[styles.thCell, styles.colClassHouse]}>House</Text>
+                  <Text style={[styles.thCell, styles.colClassPoints]}>Points</Text>
+                </View>
+
+                {/* Table Rows with dynamic class leaderboard */}
+                {classRows.map((item) => {
+                  const isYou = myStudentId != null && item.student_id === myStudentId;
+                  const houseColorVal = getHouseColor(item.house);
+
+                  return (
+                    <View
+                      key={item.student_id}
+                      style={[styles.tableRow, isYou && styles.tableRowHighlight]}
+                    >
+                      <Text
+                        style={[
+                          styles.tdRank,
+                          styles.colClassRank,
+                          isYou && styles.textHighlight,
+                        ]}
+                      >
+                        #{item.rank}
+                      </Text>
+                      <View style={[styles.colClassName, styles.nameCellWrapper]}>
+                        <View style={styles.nameRowInline}>
+                          <Text
+                            style={[styles.tdNameText, isYou && styles.textHighlight]}
+                            numberOfLines={1}
+                          >
+                            {item.full_name}
+                          </Text>
+                          {isYou && <Text style={styles.youInlineText}>(you)</Text>}
+                        </View>
+
+                        {/* Dynamic D, L, H breakdown badges */}
+                        {(item.discipline_pts !== 0 ||
+                          item.literacy_pts !== 0 ||
+                          item.habits_pts !== 0) && (
+                          <View style={styles.categoryPillsRow}>
+                            {item.discipline_pts !== 0 && (
+                              <View style={styles.categoryPillDiscipline}>
+                                <Text style={styles.categoryPillDisciplineText}>
+                                  D {item.discipline_pts}
+                                </Text>
+                              </View>
+                            )}
+                            {item.literacy_pts !== 0 && (
+                              <View style={styles.categoryPillLiteracy}>
+                                <Text style={styles.categoryPillLiteracyText}>
+                                  L {item.literacy_pts}
+                                </Text>
+                              </View>
+                            )}
+                            {item.habits_pts !== 0 && (
+                              <View style={styles.categoryPillHabits}>
+                                <Text style={styles.categoryPillHabitsText}>
+                                  H {item.habits_pts}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
                         )}
                       </View>
+                      <Text
+                        style={[
+                          styles.tdHouse,
+                          styles.colClassHouse,
+                          { color: houseColorVal },
+                        ]}
+                      >
+                        {item.house ?? '—'}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.tdPoints,
+                          styles.colClassPoints,
+                          isYou && styles.textHighlight,
+                          { fontFamily: FONTS.consolas },
+                        ]}
+                      >
+                        {item.total_points}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )}
 
-                      {/* Dynamic D, L, H breakdown badges with distinct dashboard colors */}
-                      {(disciplineVal > 0 || literacyVal > 0 || habitsVal > 0) && (
-                        <View style={styles.categoryPillsRow}>
-                          {disciplineVal > 0 && (
-                            <View style={styles.categoryPillDiscipline}>
-                              <Text style={styles.categoryPillDisciplineText}>D {disciplineVal}</Text>
-                            </View>
-                          )}
-                          {literacyVal > 0 && (
-                            <View style={styles.categoryPillLiteracy}>
-                              <Text style={styles.categoryPillLiteracyText}>L {literacyVal}</Text>
-                            </View>
-                          )}
-                          {habitsVal > 0 && (
-                            <View style={styles.categoryPillHabits}>
-                              <Text style={styles.categoryPillHabitsText}>H {habitsVal}</Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
+        {/* My points history Card (Visible across tabs matching Web LMS) */}
+        {!loading && (
+          <View style={styles.historyCard}>
+            <Text style={styles.historyTitle}>My points history</Text>
+            {history.length > 0 ? (
+              history.map((item, index) => {
+                const isLast = index === history.length - 1;
+                const isPositive = item.poin >= 0;
+                return (
+                  <View
+                    key={item.id ?? index}
+                    style={[styles.historyRow, isLast && styles.historyRowLast]}
+                  >
+                    <View style={{ flex: 1, marginRight: 12 }}>
+                      <Text style={styles.historyItemTitle} numberOfLines={1}>
+                        {item.source_label}
+                      </Text>
+                      {item.source_date ? (
+                        <Text style={styles.historyItemDate}>{item.source_date}</Text>
+                      ) : null}
                     </View>
                     <Text
                       style={[
-                        styles.tdHouse,
-                        styles.colClassHouse,
-                        item.house !== '—' && styles.tdHouseColored,
+                        styles.historyPointsBadge,
+                        !isPositive && styles.historyPointsBadgeNegative,
                       ]}
                     >
-                      {item.house}
-                    </Text>
-                    <Text style={[styles.tdPoints, styles.colClassPoints, isYou && styles.textHighlight, { fontFamily: FONTS.consolas }]}>
-                      {totalPointsVal}
+                      {isPositive ? `+${item.poin}` : item.poin}
                     </Text>
                   </View>
                 );
-              })}
-            </View>
+              })
+            ) : (
+              <Text style={styles.historyEmptyText}>No points entries yet.</Text>
+            )}
           </View>
         )}
       </ScrollView>
@@ -550,8 +898,33 @@ const styles = StyleSheet.create({
     color: '#2563EB',
     fontWeight: '700',
   },
+  loadingContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    fontFamily: FONTS.medium,
+    fontSize: 13,
+    color: '#64748B',
+  },
   tabContentContainer: {
     paddingTop: 4,
+  },
+  emptyCard: {
+    backgroundColor: '#FAF8F5',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#EFECE6',
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontFamily: FONTS.medium,
+    fontSize: 13,
+    color: '#64748B',
   },
   houseList: {
     gap: 12,
@@ -563,6 +936,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EFECE6',
     padding: 16,
+  },
+  houseCardMine: {
+    backgroundColor: '#EEF2F8',
+    borderColor: '#1B2D4F',
+  },
+  houseCardSelected: {
+    borderColor: '#94A3B8',
   },
   houseHeaderRow: {
     flexDirection: 'row',
@@ -611,15 +991,68 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 5,
   },
-  progressDotZero: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
   houseMembersText: {
     fontFamily: FONTS.regular,
     fontSize: 12,
     color: '#64748B',
+  },
+  contributorsCard: {
+    backgroundColor: '#FAF8F5',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#EFECE6',
+    padding: 16,
+    marginBottom: 16,
+  },
+  contributorsTitle: {
+    fontFamily: FONTS.bold,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 12,
+  },
+  contributorsEmptyText: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: '#64748B',
+  },
+  contributorsList: {
+    gap: 10,
+  },
+  contributorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  contributorLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  contributorRank: {
+    fontFamily: FONTS.bold,
+    fontSize: 12,
+    color: '#64748B',
+    width: 26,
+  },
+  contributorName: {
+    fontFamily: FONTS.medium,
+    fontSize: 13,
+    color: '#0F172A',
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  contributorClass: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: '#64748B',
+  },
+  contributorPoints: {
+    fontFamily: FONTS.consolas,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#0F172A',
   },
   historyCard: {
     backgroundColor: '#FAF8F5',
@@ -648,7 +1081,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#EFECE6',
   },
@@ -657,17 +1090,24 @@ const styles = StyleSheet.create({
   },
   historyItemTitle: {
     fontFamily: FONTS.regular,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13.5,
+    lineHeight: 19,
     color: '#1E293B',
-    flex: 1,
-    marginRight: 12,
+  },
+  historyItemDate: {
+    fontFamily: FONTS.regular,
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
   },
   historyPointsBadge: {
     fontFamily: FONTS.consolas,
     fontSize: 15,
     fontWeight: '700',
     color: '#15803D',
+  },
+  historyPointsBadgeNegative: {
+    color: '#B91C1C',
   },
   sectionSubtitle: {
     fontFamily: FONTS.semiBold,
@@ -727,6 +1167,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E7FF',
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
+  },
+  podiumPedestalMine: {
+    backgroundColor: '#BFDBFE',
   },
   tableCard: {
     backgroundColor: '#FFFFFF',
@@ -835,19 +1278,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#15803D',
   },
-  youBadgeMini: {
-    backgroundColor: '#BFDBFE',
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
-    borderRadius: 4,
-  },
-  youBadgeText: {
-    fontFamily: FONTS.bold,
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#1D4ED8',
-    textTransform: 'lowercase',
-  },
   textHighlight: {
     color: '#1D4ED8',
     fontWeight: '700',
@@ -864,13 +1294,8 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   tdHouse: {
-    fontFamily: FONTS.regular,
-    fontSize: 12.5,
-    color: '#64748B',
-  },
-  tdHouseColored: {
     fontFamily: FONTS.semiBold,
-    color: '#1E3A8A',
+    fontSize: 12.5,
     fontWeight: '600',
   },
   tdPoints: {

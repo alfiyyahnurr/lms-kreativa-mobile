@@ -193,6 +193,11 @@ export interface Announcement {
   date: string;
   isNew: boolean;
   read: boolean;
+  publish_at?: string | null;
+  created_by_name?: string | null;
+  is_read?: boolean;
+  school_id?: number;
+  course_id?: number | null;
 }
 
 export interface LeaderboardHouse {
@@ -204,6 +209,58 @@ export interface LeaderboardHouse {
   disciplinePts?: number;
   literacyPts?: number;
   habitsPts?: number;
+}
+
+export interface HouseLeaderboardRow {
+  house_id: number;
+  house: string;
+  total_points: number;
+  active_members: number;
+  discipline_pts: number;
+  literacy_pts: number;
+  habits_pts: number;
+}
+
+export interface StudentRankRow {
+  rank: number;
+  student_id: number;
+  full_name: string;
+  nis?: string | null;
+  class_name?: string | null;
+  house: string | null;
+  total_points: number;
+  discipline_pts: number;
+  literacy_pts: number;
+  habits_pts: number;
+}
+
+export interface HouseTopContributor {
+  rank: number;
+  student_id: number;
+  full_name: string;
+  class_name?: string | null;
+  total_points: number;
+}
+
+export interface PointsSummaryData {
+  total: number;
+  discipline: number;
+  literacy: number;
+  habits: number;
+  houseName: string | null;
+  className?: string | null;
+  schoolLevel?: string | null;
+  academicYearId?: number;
+  termId?: number | null;
+}
+
+export interface PointsLedgerItem {
+  id: number | string;
+  source_type: string;
+  source_label: string;
+  poin: number;
+  source_date: string | null;
+  house_name: string | null;
 }
 
 export interface LeaderboardStudent {
