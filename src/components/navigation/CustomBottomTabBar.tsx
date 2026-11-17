@@ -3,12 +3,12 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  HomeIcon,
-  CalendarIcon,
-  BookOpenIcon,
-  CheckCircleIcon,
-  TrophyIcon,
-} from '../common/WebIcons';
+  Home,
+  CalendarDays,
+  BookOpen,
+  CheckCircle,
+  Trophy,
+} from 'lucide-react-native';
 import { FONTS } from '../../constants/theme';
 
 export const CustomBottomTabBar: React.FC<BottomTabBarProps> = ({
@@ -55,13 +55,13 @@ export const CustomBottomTabBar: React.FC<BottomTabBarProps> = ({
   const tabs: {
     label: 'Home' | 'Plan' | 'Courses' | 'Habits' | 'Board';
     screen: string;
-    Icon: React.FC<{ size?: number; color?: string; strokeWidth?: number }>;
+    Icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
   }[] = [
-    { label: 'Home', screen: 'DashboardTab', Icon: HomeIcon },
-    { label: 'Plan', screen: 'WeeklyTab', Icon: CalendarIcon },
-    { label: 'Courses', screen: 'CoursesTab', Icon: BookOpenIcon },
-    { label: 'Habits', screen: 'HabitsTab', Icon: CheckCircleIcon },
-    { label: 'Board', screen: 'BoardTab', Icon: TrophyIcon },
+    { label: 'Home', screen: 'DashboardTab', Icon: Home },
+    { label: 'Plan', screen: 'WeeklyTab', Icon: CalendarDays },
+    { label: 'Courses', screen: 'CoursesTab', Icon: BookOpen },
+    { label: 'Habits', screen: 'HabitsTab', Icon: CheckCircle },
+    { label: 'Board', screen: 'BoardTab', Icon: Trophy },
   ];
 
   const ACTIVE_COLOR = '#2563EB';

@@ -14,23 +14,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStudentData } from '../../context/StudentDataContext';
 import { useAuth } from '../../context/AuthContext';
 import {
-  HomeIcon,
-  CalendarIcon,
-  BookOpenIcon,
-  ClipboardListIcon,
-  FileTextIcon,
-  GraduationCapIcon,
-  ScrollTextIcon,
-  BookMarkedIcon,
-  CheckCircleIcon,
-  TrophyIcon,
-  MegaphoneIcon,
-  UserIcon,
-  LogOutIcon,
-  CloseIcon,
-  ChevronDownIcon,
-  WebIconProps,
-} from '../common/WebIcons';
+  Home,
+  CalendarDays,
+  BookOpen,
+  ClipboardList,
+  FileText,
+  GraduationCap,
+  ScrollText,
+  BookMarked,
+  CheckCircle,
+  Trophy,
+  Megaphone,
+  User,
+  LogOut,
+  X,
+  ChevronDown,
+} from 'lucide-react-native';
+
+type LucideIcon = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 
 export const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
   navigation,
@@ -57,22 +58,22 @@ export const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
     navigation.closeDrawer();
   };
 
-  const primaryItems: { label: string; tabName: string; Icon: React.FC<WebIconProps> }[] = [
-    { label: 'Dashboard', tabName: 'DashboardTab', Icon: HomeIcon },
-    { label: 'Weekly Plan', tabName: 'WeeklyTab', Icon: CalendarIcon },
-    { label: 'My Courses', tabName: 'CoursesTab', Icon: BookOpenIcon },
-    { label: 'Assignments', tabName: 'AssignmentsTab', Icon: ClipboardListIcon },
-    { label: 'Quizzes', tabName: 'QuizzesTab', Icon: FileTextIcon },
-    { label: 'Exams', tabName: 'ExamsTab', Icon: GraduationCapIcon },
-    { label: 'Report Card', tabName: 'ReportCardTab', Icon: ScrollTextIcon },
-    { label: 'Literacy', tabName: 'LiteracyTab', Icon: BookMarkedIcon },
-    { label: 'Habits', tabName: 'HabitsTab', Icon: CheckCircleIcon },
-    { label: 'Leaderboard', tabName: 'BoardTab', Icon: TrophyIcon },
+  const primaryItems: { label: string; tabName: string; Icon: LucideIcon }[] = [
+    { label: 'Dashboard', tabName: 'DashboardTab', Icon: Home },
+    { label: 'Weekly Plan', tabName: 'WeeklyTab', Icon: CalendarDays },
+    { label: 'My Courses', tabName: 'CoursesTab', Icon: BookOpen },
+    { label: 'Assignments', tabName: 'AssignmentsTab', Icon: ClipboardList },
+    { label: 'Quizzes', tabName: 'QuizzesTab', Icon: FileText },
+    { label: 'Exams', tabName: 'ExamsTab', Icon: GraduationCap },
+    { label: 'Report Card', tabName: 'ReportCardTab', Icon: ScrollText },
+    { label: 'Literacy', tabName: 'LiteracyTab', Icon: BookMarked },
+    { label: 'Habits', tabName: 'HabitsTab', Icon: CheckCircle },
+    { label: 'Leaderboard', tabName: 'BoardTab', Icon: Trophy },
   ];
 
-  const moreItems: { label: string; tabName: string; Icon: React.FC<WebIconProps> }[] = [
-    { label: 'Announcements', tabName: 'AnnouncementsTab', Icon: MegaphoneIcon },
-    { label: 'Profile', tabName: 'ProfileTab', Icon: UserIcon },
+  const moreItems: { label: string; tabName: string; Icon: LucideIcon }[] = [
+    { label: 'Announcements', tabName: 'AnnouncementsTab', Icon: Megaphone },
+    { label: 'Profile', tabName: 'ProfileTab', Icon: User },
   ];
 
   // Student Info formatting: className · academicYear · houseName (matches web lines 174-182)
@@ -108,7 +109,7 @@ export const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
           accessibilityLabel="Close drawer"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <CloseIcon size={20} color="#FFFFFF" strokeWidth={2} />
+          <X size={20} color="#FFFFFF" strokeWidth={2} />
         </TouchableOpacity>
       </View>
 
@@ -168,7 +169,7 @@ export const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
           >
             <Text style={styles.moreTitle}>More</Text>
             <View style={[styles.chevronWrap, moreOpen && styles.chevronRotated]}>
-              <ChevronDownIcon size={16} color="rgba(255, 255, 255, 0.50)" strokeWidth={2} />
+              <ChevronDown size={16} color="rgba(255, 255, 255, 0.50)" strokeWidth={2} />
             </View>
           </TouchableOpacity>
 
@@ -220,7 +221,7 @@ export const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
           activeOpacity={0.75}
         >
           <View style={styles.navIcon}>
-            <LogOutIcon size={20} color="rgba(255, 255, 255, 0.70)" strokeWidth={2} />
+            <LogOut size={20} color="rgba(255, 255, 255, 0.70)" strokeWidth={2} />
           </View>
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
@@ -244,7 +245,7 @@ export const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     style={styles.modalCloseBtn}
                   >
-                    <CloseIcon size={20} color="#64748B" strokeWidth={2} />
+                    <X size={20} color="#64748B" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
 
