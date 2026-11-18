@@ -18,6 +18,7 @@ import AppHeader from '../../components/navigation/AppHeader';
 import PointsToast from '../../components/common/PointsToast';
 import { useStudentData } from '../../context/StudentDataContext';
 import { api } from '../../services/api';
+import { storage } from '../../services/storage';
 
 // SEC_HS Official Design Tokens from Web LMS (lib/sec-hs-theme.ts)
 const SEC_HS = {
@@ -180,7 +181,34 @@ export const HabitsScreen: React.FC = () => {
   // Load habit records for a month matching Web LMS loadMonth
   const loadMonth = useCallback(
     async (ym: string, preferDate?: string) => {
-      setLoadingMonth(true);
+      // Check cache first for instant response when switching months
+      try {
+        const session = await storage.getStudentSession();
+        const studentId = session?.studentId ?? session?.userId ?? 'default';
+        const cached = await storage.getCache<any>(`kreativa_cache_habits_${studentId}_${ym}`);
+        if (cached) {
+          setYearMonth(cached.yearMonth || ym);
+          if (cached.today) setToday(cached.today);
+          if (cached.track) setTrack(cached.track);
+          if (Array.isArray(cached.categories)) setCategories(cached.categories);
+          if (Array.isArray(cached.days) && cached.days.length > 0) {
+            setDays(cached.days);
+            const serverToday = cached.today || today;
+            const next =
+              preferDate && cached.days.some((d: HabitDayRecord) => d.record_date === preferDate)
+                ? preferDate
+                : pickDefaultDate(cached.days, serverToday);
+            setSelectedDate(next);
+          }
+          if (typeof cached.pointsPerFullDay === 'number') {
+            setPointsPerFullDay(cached.pointsPerFullDay);
+          }
+          setLoadingMonth(false);
+        }
+      } catch {
+        // ignore cache read errors
+      }
+
       try {
         const data = await api.habits.getMonth(ym);
         if (data && Array.isArray(data.days)) {
@@ -199,6 +227,24 @@ export const HabitsScreen: React.FC = () => {
               ? preferDate
               : pickDefaultDate(data.days, serverToday);
           setSelectedDate(next);
+
+          // Persist snapshot to local cache in background
+          void (async () => {
+            try {
+              const session = await storage.getStudentSession();
+              const studentId = session?.studentId ?? session?.userId ?? 'default';
+              await storage.setCache(`kreativa_cache_habits_${studentId}_${data.yearMonth || ym}`, {
+                yearMonth: data.yearMonth || ym,
+                today: data.today,
+                track: data.track,
+                categories: data.categories,
+                days: data.days,
+                pointsPerFullDay: data.pointsPerFullDay,
+              });
+            } catch {
+              // ignore
+            }
+          })();
         }
       } catch (err: any) {
         console.warn('[Habits Load Month Error]', err?.message || err);
@@ -210,27 +256,82 @@ export const HabitsScreen: React.FC = () => {
     [today, showToast]
   );
 
-  // Initial mount load
+  // Initial mount load & Instant SWR Cache-First Hydration (< 0.05s)
   useEffect(() => {
+    let isMounted = true;
+    async function hydrateCache() {
+      try {
+        const session = await storage.getStudentSession();
+        const studentId = session?.studentId ?? session?.userId ?? 'default';
+        const cached = await storage.getCache<any>(`kreativa_cache_habits_${studentId}_${yearMonth}`);
+        if (cached && isMounted) {
+          if (cached.yearMonth) setYearMonth(cached.yearMonth);
+          if (cached.today) setToday(cached.today);
+          if (cached.track) setTrack(cached.track);
+          if (Array.isArray(cached.categories)) setCategories(cached.categories);
+          if (Array.isArray(cached.days) && cached.days.length > 0) {
+            setDays(cached.days);
+            const serverToday = cached.today || today;
+            const next = pickDefaultDate(cached.days, serverToday);
+            setSelectedDate(next);
+          }
+          if (typeof cached.pointsPerFullDay === 'number') {
+            setPointsPerFullDay(cached.pointsPerFullDay);
+          }
+          setLoadingMonth(false); // Instant render!
+        }
+
+        // Hydrate class habits leaderboard snapshot
+        const cachedLb = await storage.getCache<any>(`kreativa_cache_habits_lb_${studentId}`);
+        if (cachedLb && isMounted) {
+          if (Array.isArray(cachedLb.rows)) setLbRows(cachedLb.rows);
+          if (cachedLb.myId != null) setLbMyId(cachedLb.myId);
+          if (cachedLb.className != null) setLbClassName(cachedLb.className);
+        }
+      } catch (e) {
+        console.warn('[Habits Cache Hydration Warning]', e);
+      }
+    }
+    hydrateCache();
     loadMonth(yearMonth);
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Fetch class habits leaderboard
   const fetchLeaderboard = useCallback(async () => {
-    setLbLoading(true);
+    if (!lbRows || lbRows.length === 0) {
+      setLbLoading(true);
+    }
     try {
       const data = await api.leaderboard.getClass();
       if (data && Array.isArray(data.rows)) {
         setLbRows(data.rows);
         setLbMyId(Number(data.myStudentId) || null);
         setLbClassName(data.className ?? null);
+
+        // Persist to local cache in background
+        void (async () => {
+          try {
+            const session = await storage.getStudentSession();
+            const studentId = session?.studentId ?? session?.userId ?? 'default';
+            await storage.setCache(`kreativa_cache_habits_lb_${studentId}`, {
+              rows: data.rows,
+              myId: Number(data.myStudentId) || null,
+              className: data.className ?? null,
+            });
+          } catch {
+            // ignore
+          }
+        })();
       }
     } catch (err: any) {
       console.warn('[Leaderboard Load Error]', err?.message || err);
     } finally {
       setLbLoading(false);
     }
-  }, []);
+  }, [lbRows]);
 
   // Load leaderboard when tab switches
   useEffect(() => {
@@ -386,6 +487,27 @@ export const HabitsScreen: React.FC = () => {
           void loadMonth(yearMonth, selectedDate);
         }
       }
+
+      // Persist snapshot to local cache after sync completes
+      setDays((currentDays) => {
+        void (async () => {
+          try {
+            const session = await storage.getStudentSession();
+            const studentId = session?.studentId ?? session?.userId ?? 'default';
+            await storage.setCache(`kreativa_cache_habits_${studentId}_${yearMonth}`, {
+              yearMonth,
+              today,
+              track,
+              categories,
+              days: currentDays,
+              pointsPerFullDay,
+            });
+          } catch {
+            // ignore
+          }
+        })();
+        return currentDays;
+      });
     }, 400);
   }
 
