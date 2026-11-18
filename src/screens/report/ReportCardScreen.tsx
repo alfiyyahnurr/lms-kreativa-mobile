@@ -13,6 +13,7 @@ import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/nativ
 import AppHeader from '../../components/navigation/AppHeader';
 import ToastAlert from '../../components/feedback/ToastAlert';
 import { api } from '../../services/api';
+import { storage } from '../../services/storage';
 import {
   PublishedCard,
   PublishedCardSummary,
@@ -54,6 +55,35 @@ export const ReportCardScreen: React.FC = () => {
     }
   }, [route.params?.resetKey]);
 
+  // Instant SWR Cache-First Hydration (< 0.05s)
+  useEffect(() => {
+    let isMounted = true;
+    async function hydrateCache() {
+      try {
+        const session = await storage.getStudentSession();
+        const studentId = session?.studentId ?? session?.userId ?? 'default';
+        const cached = await storage.getCache<any>(`kreativa_cache_reportcards_${studentId}`);
+        if (cached && isMounted) {
+          if (Array.isArray(cached.cards) && cached.cards.length > 0) {
+            setCards(cached.cards);
+          }
+          if (cached.selectedId != null) {
+            setSelectedId(cached.selectedId);
+          }
+          if (cached.card) {
+            setCard(cached.card);
+          }
+        }
+      } catch (e) {
+        console.warn('[ReportCard Cache Hydration Warning]', e);
+      }
+    }
+    hydrateCache();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Load published cards list on initial mount
   useEffect(() => {
     let isMounted = true;
@@ -68,6 +98,21 @@ export const ReportCardScreen: React.FC = () => {
           if (isMounted) {
             setCard(detail);
           }
+
+          // Persist snapshot to local cache
+          void (async () => {
+            try {
+              const session = await storage.getStudentSession();
+              const studentId = session?.studentId ?? session?.userId ?? 'default';
+              await storage.setCache(`kreativa_cache_reportcards_${studentId}`, {
+                cards: fetchedCards,
+                selectedId: firstId,
+                card: detail,
+              });
+            } catch {
+              // ignore
+            }
+          })();
         }
       } catch (err: any) {
         // Fallback already pre-set
@@ -82,12 +127,37 @@ export const ReportCardScreen: React.FC = () => {
   async function openCard(id: number) {
     setSelectedId(id);
     if (card?.id === id) return;
-    setLoading(true);
     setError(null);
+
+    // Try instant detail from cache if available
+    try {
+      const session = await storage.getStudentSession();
+      const studentId = session?.studentId ?? session?.userId ?? 'default';
+      const cachedDetail = await storage.getCache<PublishedCard>(`kreativa_cache_reportcard_detail_${studentId}_${id}`);
+      if (cachedDetail) {
+        setCard(cachedDetail);
+      } else {
+        setLoading(true);
+      }
+    } catch {
+      setLoading(true);
+    }
+
     try {
       const detail = await api.reportCards.getReportCard(id);
       if (!detail) throw new Error('Could not load this report card');
       setCard(detail);
+
+      // Persist detail to cache
+      void (async () => {
+        try {
+          const session = await storage.getStudentSession();
+          const studentId = session?.studentId ?? session?.userId ?? 'default';
+          await storage.setCache(`kreativa_cache_reportcard_detail_${studentId}_${id}`, detail);
+        } catch {
+          // ignore
+        }
+      })();
     } catch (err: any) {
       setError(err instanceof Error ? err.message : 'Could not load this report card');
     } finally {
