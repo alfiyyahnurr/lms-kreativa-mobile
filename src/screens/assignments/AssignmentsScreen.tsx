@@ -12,6 +12,7 @@ import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navig
 import { BottomTabParamList } from '../../types/navigation';
 import { Assignment } from '../../types';
 import { api } from '../../services/api';
+import { storage } from '../../services/storage';
 import AppHeader from '../../components/navigation/AppHeader';
 import ToastAlert from '../../components/feedback/ToastAlert';
 import CardSkeleton from '../../components/feedback/CardSkeleton';
@@ -78,6 +79,28 @@ export const AssignmentsScreen: React.FC = () => {
 
   const isFetchingRef = useRef<boolean>(false);
 
+  // Instant SWR Cache-First Hydration (< 0.05s)
+  useEffect(() => {
+    let isMounted = true;
+    async function hydrateCache() {
+      try {
+        const session = await storage.getStudentSession();
+        const studentId = session?.studentId ?? session?.userId ?? 'default';
+        const cached = await storage.getCache<Assignment[]>(`kreativa_cache_assignments_${studentId}`);
+        if (cached && Array.isArray(cached) && cached.length > 0 && isMounted) {
+          setAssignments([DUMMY_TEST_ASSIGNMENT, ...cached.filter((a) => a.id !== 999999)]);
+          setIsLoading(false); // Instant render!
+        }
+      } catch (e) {
+        console.warn('[Assignments Cache Hydration Warning]', e);
+      }
+    }
+    hydrateCache();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Fetch live assignments from API (Stable & Guarded)
   const fetchAssignments = useCallback(async (isRefresh = false) => {
     if (isFetchingRef.current) return;
@@ -95,6 +118,17 @@ export const AssignmentsScreen: React.FC = () => {
       const data = await api.assignments.list();
       // Prepend dummy testing assignment at the top for testing form submission
       setAssignments([DUMMY_TEST_ASSIGNMENT, ...data.filter((a) => a.id !== 999999)]);
+
+      // Persist latest data snapshot to local cache in background
+      void (async () => {
+        try {
+          const session = await storage.getStudentSession();
+          const studentId = session?.studentId ?? session?.userId ?? 'default';
+          await storage.setCache(`kreativa_cache_assignments_${studentId}`, data);
+        } catch {
+          // ignore cache write error
+        }
+      })();
     } catch (err: any) {
       console.error('Failed to load assignments:', err);
       setIsError(true);
