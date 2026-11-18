@@ -14,6 +14,7 @@ import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/nativ
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SHADOWS } from '../../constants/theme';
 import { api } from '../../services/api';
+import { storage } from '../../services/storage';
 import { Announcement } from '../../types';
 import AppHeader from '../../components/navigation/AppHeader';
 
@@ -67,6 +68,28 @@ export const AnnouncementsScreen: React.FC = () => {
 
   const isFetchingRef = useRef<boolean>(false);
 
+  // Instant SWR Cache-First Hydration (< 0.05s)
+  useEffect(() => {
+    let isMounted = true;
+    async function hydrateCache() {
+      try {
+        const session = await storage.getStudentSession();
+        const studentId = session?.studentId ?? session?.userId ?? 'default';
+        const cached = await storage.getCache<Announcement[]>(`kreativa_cache_announcements_${studentId}`);
+        if (cached && Array.isArray(cached) && cached.length > 0 && isMounted) {
+          setItems(cached);
+          setLoading(false); // Instant render!
+        }
+      } catch (e) {
+        console.warn('[Announcements Cache Hydration Warning]', e);
+      }
+    }
+    hydrateCache();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Load announcements from Live Backend API (Stable & Guarded)
   const loadAnnouncements = useCallback(async () => {
     if (isFetchingRef.current) return;
@@ -76,6 +99,16 @@ export const AnnouncementsScreen: React.FC = () => {
       const data = await api.announcements.list();
       if (Array.isArray(data)) {
         setItems(data);
+        // Persist latest data snapshot to local cache in background
+        void (async () => {
+          try {
+            const session = await storage.getStudentSession();
+            const studentId = session?.studentId ?? session?.userId ?? 'default';
+            await storage.setCache(`kreativa_cache_announcements_${studentId}`, data);
+          } catch {
+            // ignore cache write error
+          }
+        })();
       }
     } catch (err: any) {
       console.warn('[Announcements Load Error]', err?.message || err);
