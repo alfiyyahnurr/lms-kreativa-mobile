@@ -197,6 +197,11 @@ export const storage = {
     delete memoryStorage[STORAGE_KEYS.AUTH_TOKEN];
     delete memoryStorage[STORAGE_KEYS.STUDENT_PROFILE];
     delete memoryStorage[STORAGE_KEYS.SESSION_TIMESTAMP];
+    Object.keys(memoryStorage).forEach((k) => {
+      if (k.startsWith('kreativa_cache_')) {
+        delete memoryStorage[k];
+      }
+    });
 
     // 2. Overwrite with empty string in native SQLite so no stale value lingers
     try {
@@ -213,6 +218,35 @@ export const storage = {
     await this.removeItem(STORAGE_KEYS.AUTH_TOKEN);
     await this.removeItem(STORAGE_KEYS.STUDENT_PROFILE);
     await this.removeItem(STORAGE_KEYS.SESSION_TIMESTAMP);
+  },
+
+  // --- Stale-While-Revalidate Caching Helpers ---
+  async getCache<T>(key: string): Promise<T | null> {
+    try {
+      const raw = await this.getItem(key);
+      if (!raw || typeof raw !== 'string') return null;
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null;
+      return JSON.parse(trimmed) as T;
+    } catch {
+      return null;
+    }
+  },
+
+  async setCache<T>(key: string, data: T): Promise<void> {
+    try {
+      if (data === null || data === undefined) {
+        await this.removeItem(key);
+        return;
+      }
+      await this.setItem(key, JSON.stringify(data));
+    } catch (err) {
+      console.warn('[Storage setCache Error]', err);
+    }
+  },
+
+  async removeCache(key: string): Promise<void> {
+    return this.removeItem(key);
   },
 };
 
