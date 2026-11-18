@@ -65,8 +65,12 @@ export const AnnouncementsScreen: React.FC = () => {
     }
   }, [route.params?.resetKey]);
 
-  // Load announcements from Live Backend API
+  const isFetchingRef = useRef<boolean>(false);
+
+  // Load announcements from Live Backend API (Stable & Guarded)
   const loadAnnouncements = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       setError(null);
       const data = await api.announcements.list();
@@ -77,7 +81,9 @@ export const AnnouncementsScreen: React.FC = () => {
       console.warn('[Announcements Load Error]', err?.message || err);
       setError(err?.message || 'Failed to load announcements.');
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -91,11 +97,7 @@ export const AnnouncementsScreen: React.FC = () => {
   // Scoped Pull-to-Refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try {
-      await loadAnnouncements();
-    } finally {
-      setRefreshing(false);
-    }
+    await loadAnnouncements();
   }, [loadAnnouncements]);
 
   // Handle open announcement detail & mark as read

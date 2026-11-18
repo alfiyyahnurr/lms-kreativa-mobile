@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   StudentProfile,
   LeaderboardStudent,
@@ -171,7 +171,10 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return null;
   }, []);
 
-  const refreshAllData = async () => {
+  const isRefreshingAllRef = useRef(false);
+  const refreshAllData = useCallback(async () => {
+    if (isRefreshingAllRef.current) return;
+    isRefreshingAllRef.current = true;
     setIsRefreshing(true);
     setIsError(false);
     setErrorMessage(null);
@@ -199,9 +202,10 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       setIsError(true);
       setErrorMessage(err?.message || 'Failed to refresh data. Please try again.');
     } finally {
+      isRefreshingAllRef.current = false;
       setIsRefreshing(false);
     }
-  };
+  }, [fetchDashboardData]);
 
   // 1. Habits Per Date State (anchored to static October historical data, with today empty)
   const [habitsByDate, setHabitsByDate] = useState<Record<string, HabitGroup[]>>(() =>

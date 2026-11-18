@@ -94,6 +94,8 @@ export const LeaderboardScreen: React.FC = () => {
   const [className, setClassName] = useState<string | null>(null);
   const [myStudentId, setMyStudentId] = useState<number | null>(null);
   const [history, setHistory] = useState<PointsLedgerItem[]>([]);
+  const isFetchingRef = useRef<boolean>(false);
+  const selectedHouseIdRef = useRef<number | null>(null);
 
   // Scroll to top on navigation/focus
   useFocusEffect(
@@ -126,6 +128,7 @@ export const LeaderboardScreen: React.FC = () => {
 
   // Load contributors for a selected house
   const loadContributors = useCallback(async (houseId: number) => {
+    selectedHouseIdRef.current = houseId;
     setSelectedHouseId(houseId);
     setLoadingContrib(true);
     try {
@@ -142,12 +145,16 @@ export const LeaderboardScreen: React.FC = () => {
     }
   }, []);
 
-  // Main data loader fetching all 5 endpoints in parallel
+  // Main data loader fetching all 5 endpoints in parallel (Stable & Guarded)
   const loadLeaderboardData = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
     try {
+      const targetHouseId = selectedHouseIdRef.current ?? undefined;
       const [sumRes, housesRes, jenjangRes, classRes, histRes] = await Promise.all([
         api.points.getSummary(),
-        api.leaderboard.getHouses(),
+        api.leaderboard.getHouses(targetHouseId),
         api.leaderboard.getJenjang(),
         api.leaderboard.getClass(),
         api.points.getHistory(),
@@ -165,13 +172,23 @@ export const LeaderboardScreen: React.FC = () => {
         if (housesRes.myHouseId != null) setMyHouseId(housesRes.myHouseId);
         if (housesRes.myHouseName) setMyHouseName(housesRes.myHouseName);
 
-        const initialHouse = selectedHouseId ?? housesRes.myHouseId ?? housesRes.rows[0]?.house_id;
-        if (initialHouse) {
-          setSelectedHouseId(initialHouse);
+        const activeHouse =
+          selectedHouseIdRef.current ?? housesRes.myHouseId ?? housesRes.rows[0]?.house_id;
+        if (activeHouse) {
+          selectedHouseIdRef.current = activeHouse;
+          setSelectedHouseId(activeHouse);
           if (housesRes.contributors && Array.isArray(housesRes.contributors)) {
             setContributors(housesRes.contributors);
           } else {
-            void loadContributors(initialHouse);
+            // Synchronously load contributors if not returned in initial batch
+            try {
+              const cRes = await api.leaderboard.getHouses(activeHouse);
+              if (cRes && Array.isArray(cRes.contributors)) {
+                setContributors(cRes.contributors);
+              }
+            } catch (cErr: any) {
+              console.warn('[Contributors Sync Error]', cErr?.message || cErr);
+            }
           }
         }
       }
@@ -195,9 +212,11 @@ export const LeaderboardScreen: React.FC = () => {
     } catch (err: any) {
       console.warn('[Leaderboard Load Error]', err?.message || err);
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [selectedHouseId, loadContributors]);
+  }, []);
 
   // Initial load on screen focus
   useFocusEffect(
@@ -209,11 +228,7 @@ export const LeaderboardScreen: React.FC = () => {
   // Pure Pull-to-Refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try {
-      await loadLeaderboardData();
-    } finally {
-      setRefreshing(false);
-    }
+    await loadLeaderboardData();
   }, [loadLeaderboardData]);
 
   // Dynamic podium top 3 from classRows

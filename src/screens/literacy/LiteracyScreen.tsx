@@ -205,6 +205,8 @@ export const LiteracyScreen: React.FC = () => {
     resetForm();
   }, [isEditing, selectedEntry, resetForm]);
 
+  const isRefreshingRef = useRef<boolean>(false);
+
   // Load literacy logs and statistics whenever screen comes into focus
   useFocusEffect(
     useCallback(() => {
@@ -233,8 +235,10 @@ export const LiteracyScreen: React.FC = () => {
     }, [fetchLiteracyLogs, fetchLiteracyStats, resetForm])
   );
 
-  // Pure Pull-to-Refresh handler for Literacy logs & stats
+  // Pure Pull-to-Refresh handler for Literacy logs & stats (Guarded)
   const onRefresh = useCallback(async () => {
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
     setRefreshing(true);
     try {
       const [logs, stats] = await Promise.all([
@@ -246,6 +250,7 @@ export const LiteracyScreen: React.FC = () => {
     } catch (err) {
       console.warn('[Literacy onRefresh Error]', err);
     } finally {
+      isRefreshingRef.current = false;
       setRefreshing(false);
     }
   }, [fetchLiteracyLogs, fetchLiteracyStats]);
