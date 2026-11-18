@@ -31,11 +31,49 @@ export interface Course {
 
 export interface Assignment {
   id: number;
-  title: string;
+  course_id?: number;
+  course_name?: string;
   course: string;
+  title: string;
+  description?: string | null;
+  instructions?: string | null;
+  assignment_type?: 'individual' | 'group' | string;
+  submission_type?: string;
+  max_score?: number;
+  pass_score?: number | null;
+  weight?: number;
+  due_date?: string | null;
   dueDate: string;
   score: string;
   status: 'pending' | 'submitted' | 'graded';
+  submission_status?: 'graded' | 'submitted' | 'not_submitted' | 'pending' | null;
+  submission_score?: number | string | null;
+}
+
+export interface AssignmentDetailResponse {
+  assignment: Assignment;
+  submission: {
+    id: number;
+    assignment_id: number;
+    student_id: number;
+    attempt_number: number;
+    submission_text: string | null;
+    submission_url: string | null;
+    status: 'not_submitted' | 'submitted' | 'late' | 'graded' | 'returned';
+    score: number | string | null;
+    feedback: string | null;
+    graded_at: string | null;
+    submitted_at: string | null;
+    updated_at: string | null;
+  } | null;
+  files: Array<{
+    id: number;
+    submission_id: number;
+    file_name: string;
+    file_path: string;
+    file_size_bytes: number | null;
+    mime_type: string | null;
+  }>;
 }
 
 export interface QuizOption {

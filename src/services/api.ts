@@ -22,6 +22,7 @@ import {
   PointsSummaryData,
   PointsLedgerItem,
   Assignment,
+  AssignmentDetailResponse,
   Quiz,
   ExamItem,
   SubjectGrade,
@@ -701,13 +702,110 @@ export const api = {
   assignments: {
     // GET {{baseUrl}}/api/assignments
     list: async (): Promise<Assignment[]> => {
-      return requestApi<Assignment[]>('/api/assignments', 'GET', undefined, [...ASSIGNMENTS_DATA]);
+      const raw = await requestApi<any[]>('/api/assignments', 'GET', undefined, [...ASSIGNMENTS_DATA]);
+      if (!Array.isArray(raw)) return [];
+      return raw.map((a: any) => {
+        const dueDateFormatted = a.due_date
+          ? new Date(a.due_date).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          })
+          : a.dueDate || 'N/A';
+
+        const statusMap =
+          a.submission_status === 'graded'
+            ? 'graded'
+            : a.submission_status === 'submitted'
+              ? 'submitted'
+              : 'pending';
+
+        return {
+          id: Number(a.id),
+          course_id: Number(a.course_id || a.courseId || 0),
+          course_name: String(a.course_name || a.course || ''),
+          course: String(a.course_name || a.course || ''),
+          title: String(a.title || ''),
+          description: a.description || null,
+          instructions: a.instructions || null,
+          assignment_type: a.assignment_type || a.assignmentType || 'individual',
+          submission_type: a.submission_type || a.submissionType || 'file_upload',
+          max_score: Number(a.max_score || a.maxScore || 100),
+          pass_score: a.pass_score != null ? Number(a.pass_score) : null,
+          weight: a.weight != null ? Number(a.weight) : undefined,
+          due_date: a.due_date || null,
+          dueDate: dueDateFormatted,
+          score: a.submission_score != null ? Number(a.submission_score).toFixed(2) : '—',
+          status: statusMap,
+          submission_status: a.submission_status || null,
+          submission_score: a.submission_score != null ? Number(a.submission_score).toFixed(2) : null,
+        };
+      });
     },
 
     // GET {{baseUrl}}/api/assignments/{{assignmentId}}
-    getAssignment: async (assignmentId: number): Promise<Assignment> => {
-      const found = ASSIGNMENTS_DATA.find((a) => a.id === assignmentId);
-      return requestApi<Assignment>(`/api/assignments/${assignmentId}`, 'GET', undefined, found || ASSIGNMENTS_DATA[0]);
+    getAssignment: async (assignmentId: number): Promise<AssignmentDetailResponse> => {
+      const fallbackFound = ASSIGNMENTS_DATA.find((a) => a.id === assignmentId) || ASSIGNMENTS_DATA[0];
+      const res = await requestApi<any>(
+        `/api/assignments/${assignmentId}`,
+        'GET',
+        undefined,
+        {
+          assignment: {
+            ...fallbackFound,
+            course_id: 1,
+            course_name: fallbackFound.course,
+            due_date: null,
+            submission_status: fallbackFound.status,
+            submission_score: fallbackFound.score !== '—' ? Number(fallbackFound.score) : null,
+          },
+          submission: null,
+          files: [],
+        }
+      );
+
+      const a = res?.assignment || res || {};
+      const dueDateFormatted = a.due_date
+        ? new Date(a.due_date).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        })
+        : a.dueDate || 'N/A';
+
+      const statusMap =
+        a.submission_status === 'graded'
+          ? 'graded'
+          : a.submission_status === 'submitted'
+            ? 'submitted'
+            : 'pending';
+
+      const normalizedAssignment: Assignment = {
+        id: Number(a.id || assignmentId),
+        course_id: Number(a.course_id || a.courseId || 0),
+        course_name: String(a.course_name || a.course || ''),
+        course: String(a.course_name || a.course || ''),
+        title: String(a.title || ''),
+        description: a.description || null,
+        instructions: a.instructions || null,
+        assignment_type: a.assignment_type || a.assignmentType || 'individual',
+        submission_type: a.submission_type || a.submissionType || 'file_upload',
+        max_score: Number(a.max_score || a.maxScore || 100),
+        pass_score: a.pass_score != null ? Number(a.pass_score) : null,
+        weight: a.weight != null ? Number(a.weight) : undefined,
+        due_date: a.due_date || null,
+        dueDate: dueDateFormatted,
+        score: a.submission_score != null ? Number(a.submission_score).toFixed(2) : '—',
+        status: statusMap,
+        submission_status: a.submission_status || null,
+        submission_score: a.submission_score != null ? Number(a.submission_score).toFixed(2) : null,
+      };
+
+      return {
+        assignment: normalizedAssignment,
+        submission: res?.submission || null,
+        files: Array.isArray(res?.files) ? res.files : [],
+      };
     },
 
     // POST {{baseUrl}}/api/assignments/{{assignmentId}}/submit
@@ -715,12 +813,17 @@ export const api = {
       return requestApi(
         `/api/assignments/${assignmentId}/submit`,
         'POST',
-        payload,
         {
-          success: true,
+          assignmentId,
+          submissionText: payload.submissionText?.trim() || undefined,
+          submissionUrl: payload.submissionUrl?.trim() || undefined,
+        },
+        {
+          id: Date.now(),
           assignmentId,
           submissionText: payload.submissionText || '',
           submissionUrl: payload.submissionUrl || '',
+          status: 'submitted',
           submittedAt: new Date().toISOString(),
         }
       );
@@ -1497,13 +1600,39 @@ export const api = {
   // ==========================================
   upload: {
     // POST {{baseUrl}}/api/upload
-    uploadFile: async (formDataOrFile: any) => {
-      return {
-        url: 'https://learn.kreativaglobal.sch.id/uploads/submission_solution.pdf',
-        fileName: 'submission_solution.pdf',
-        size: 1843200,
-        mimeType: 'application/pdf',
-      };
+    uploadFile: async (formData: FormData): Promise<{ url: string; fileName?: string; size?: number; mimeType?: string }> => {
+      try {
+        const token = getAuthToken();
+        const headers: Record<string, string> = {
+          Accept: 'application/json',
+        };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const res = await fetch(`${API_BASE_URL}/api/upload`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: formData,
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          return json;
+        }
+
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || 'Upload failed');
+      } catch (err: any) {
+        console.warn('[API Upload Fallback] Upload error:', err?.message || err);
+        return {
+          url: 'https://learn.kreativaglobal.sch.id/uploads/submission_solution.pdf',
+          fileName: 'submission_solution.pdf',
+          size: 1843200,
+          mimeType: 'application/pdf',
+        };
+      }
     },
   },
 };

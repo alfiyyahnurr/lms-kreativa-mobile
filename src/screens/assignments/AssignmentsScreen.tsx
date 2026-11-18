@@ -1,38 +1,123 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { BottomTabParamList } from '../../types/navigation';
-import { useStudentData } from '../../context/StudentDataContext';
 import { Assignment } from '../../types';
+import { api } from '../../services/api';
 import AppHeader from '../../components/navigation/AppHeader';
 import ToastAlert from '../../components/feedback/ToastAlert';
-import EmptyState from '../../components/feedback/EmptyState';
-import ErrorState from '../../components/feedback/ErrorState';
 import CardSkeleton from '../../components/feedback/CardSkeleton';
-import { COLORS, FONTS, SHADOWS } from '../../constants/theme';
-import Badge from '../../components/common/Badge';
+import ErrorState from '../../components/feedback/ErrorState';
+import { FONTS } from '../../constants/theme';
 import AssignmentDetailView from './AssignmentDetailView';
 
+// =========================================================================
+// TEMPORARY TESTING DATA - WILL BE REMOVED AFTER TESTING
+// =========================================================================
+export const DUMMY_TEST_ASSIGNMENT: Assignment = {
+  id: 999999,
+  course_id: 1,
+  course: 'Computer Science & AI — S4 A 2026/2027',
+  course_name: 'Computer Science & AI — S4 A 2026/2027',
+  title: 'Practical Project: Mobile & Web Integration (Testing)',
+  description:
+    'This is a temporary dummy assignment created for testing submission workflow before deadline.\n\nYou can type your answer, pick/upload a file from your device, and submit your work to test the UI flow.',
+  dueDate: 'Dec 30, 2026',
+  due_date: '2026-12-30T23:59:59Z',
+  score: '—',
+  status: 'pending',
+  submission_status: null,
+  submission_score: null,
+  max_score: 100,
+  assignment_type: 'project',
+};
+
 export const AssignmentsScreen: React.FC = () => {
-  const {
-    assignments,
-    isLoading,
-    isRefreshing,
-    isError,
-    errorMessage,
-    refreshAllData,
-  } = useStudentData();
+  const [assignments, setAssignments] = useState<Assignment[]>([DUMMY_TEST_ASSIGNMENT]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isError, setIsError] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<BottomTabParamList, 'AssignmentsTab'>>();
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const scrollRef = useRef<any>(null);
 
-  // Auto-close assignment detail and scroll to top when navigating away or focusing
+  // Formatting helper matching Web LMS format(new Date(...), 'MMM d, yyyy')
+  const formatDueDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Score formatter ensuring 2 decimal places matching Web LMS (NUMERIC(6,2))
+  const formatScoreDisplay = (val: any) => {
+    if (val == null || val === '—') return null;
+    const n = Number(val);
+    return isNaN(n) ? String(val) : n.toFixed(2);
+  };
+
+  const isFetchingRef = useRef<boolean>(false);
+
+  // Fetch live assignments from API (Stable & Guarded)
+  const fetchAssignments = useCallback(async (isRefresh = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
+    try {
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      setIsError(false);
+      setErrorMessage(null);
+
+      const data = await api.assignments.list();
+      // Prepend dummy testing assignment at the top for testing form submission
+      setAssignments([DUMMY_TEST_ASSIGNMENT, ...data.filter((a) => a.id !== 999999)]);
+    } catch (err: any) {
+      console.error('Failed to load assignments:', err);
+      setIsError(true);
+      setErrorMessage(err?.message || 'Failed to load assignments from server.');
+      // Keep dummy testing assignment visible even on error for testing
+      setAssignments((prev) => (prev.length > 0 ? prev : [DUMMY_TEST_ASSIGNMENT]));
+    } finally {
+      isFetchingRef.current = false;
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  // Sync on screen focus
   useFocusEffect(
     useCallback(() => {
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      fetchAssignments();
+    }, [fetchAssignments])
+  );
+
+  // Auto-close assignment detail and scroll to top when navigating away
+  useFocusEffect(
+    useCallback(() => {
       return () => {
         setSelectedAssignment(null);
         setToastMessage(null);
@@ -82,13 +167,14 @@ export const AssignmentsScreen: React.FC = () => {
   const handleBack = () => {
     setSelectedAssignment(null);
     navigation.setParams({ isDetail: false, assignmentId: undefined });
+    fetchAssignments(); // Refresh list to get updated submission status
   };
 
   const handleSubmissionSuccess = (assignmentId: number) => {
+    setAssignments((prev) =>
+      prev.map((a) => (a.id === assignmentId ? { ...a, status: 'submitted', submission_status: 'submitted' } : a))
+    );
     const target = assignments.find((a) => a.id === assignmentId);
-    if (target) {
-      target.status = 'submitted';
-    }
     setToastMessage(`Assignment "${target?.title || 'Assignment'}" successfully submitted!`);
   };
 
@@ -118,77 +204,97 @@ export const AssignmentsScreen: React.FC = () => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
-              onRefresh={refreshAllData}
-              colors={[COLORS.accentBlue]}
-              tintColor={COLORS.accentBlue}
+              onRefresh={() => fetchAssignments(true)}
+              colors={['#2563EB']}
+              tintColor={'#2563EB'}
             />
           }
         >
-          {/* Header Title matching Screenshot 110036 */}
+          {/* Header Title & Subtitle matching Web LMS */}
           <View style={styles.headerBox}>
             <Text style={styles.pageTitle}>Assignments</Text>
             <Text style={styles.pageSubtitle}>All assignments across your courses</Text>
           </View>
 
-          {/* Data State Guards */}
-          {isLoading ? (
+          {/* Loading & Error States */}
+          {isLoading && !isRefreshing ? (
             <CardSkeleton count={3} variant="assignment" />
-          ) : isError ? (
+          ) : isError && assignments.length === 0 ? (
             <ErrorState
               title="Failed to Load Assignments"
               subtitle={errorMessage || undefined}
-              onRetry={refreshAllData}
+              onRetry={() => fetchAssignments()}
             />
           ) : assignments.length === 0 ? (
-            <EmptyState
-              icon="clipboard-outline"
-              title="No Assignments"
-              subtitle="You have no pending or completed assignments at the moment."
-              actionLabel="Refresh List"
-              onAction={refreshAllData}
-            />
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No assignments found.</Text>
+            </View>
           ) : (
-            /* Cards List matching Web assignments-list-client */
+            /* Card Grid View (100% Identical to Web LMS CardList - Grid Aja) */
             <View style={styles.cardList}>
-              {assignments.map((assignment) => (
-                <TouchableOpacity
-                  key={assignment.id}
-                  onPress={() => handleSelectAssignment(assignment)}
-                  activeOpacity={0.75}
-                  style={styles.assignmentCard}
-                >
-                  <View style={styles.assignmentCardInner}>
-                    <View style={styles.assignmentCardMain}>
-                      <Text style={styles.assignmentTitle} numberOfLines={2}>
-                        {assignment.title}
-                      </Text>
-                      <Text style={styles.assignmentSubtitle} numberOfLines={2}>
-                        {assignment.course} • Due: {assignment.dueDate}
-                      </Text>
-                    </View>
-                    <View style={styles.assignmentCardRight}>
-                      {assignment.score && assignment.score !== '—' && (
-                        <Text style={styles.assignmentScoreText}>{assignment.score}/100</Text>
-                      )}
-                      <Badge
-                        color={
-                          assignment.status === 'graded'
-                            ? 'green'
-                            : assignment.status === 'submitted'
-                            ? 'blue'
-                            : 'orange'
-                        }
+              {assignments.map((assignment) => {
+                const courseName = assignment.course_name || assignment.course || 'Course';
+                const formattedDueDate = formatDueDate(assignment.due_date || assignment.dueDate);
+                const score =
+                  assignment.submission_score != null
+                    ? assignment.submission_score
+                    : assignment.score && assignment.score !== '—'
+                      ? assignment.score
+                      : null;
+                const status = assignment.submission_status || assignment.status || 'pending';
+
+                return (
+                  <TouchableOpacity
+                    key={assignment.id}
+                    onPress={() => handleSelectAssignment(assignment)}
+                    activeOpacity={0.75}
+                    style={styles.assignmentCard}
+                  >
+                    <Text style={styles.assignmentTitle} numberOfLines={2}>
+                      {assignment.title}
+                    </Text>
+                    {/* Subtitle murni tanpa kata '(expired)' matching Web LMS */}
+                    <Text style={styles.assignmentSubtitle} numberOfLines={2}>
+                      {courseName} • Due: {formattedDueDate}
+                    </Text>
+
+                    <View style={styles.cardFooter}>
+                      <View
+                        style={[
+                          styles.badgePill,
+                          status === 'graded'
+                            ? styles.badgeGraded
+                            : status === 'submitted'
+                              ? styles.badgeSubmitted
+                              : styles.badgePending,
+                        ]}
                       >
-                        {assignment.status}
-                      </Badge>
+                        <Text
+                          style={[
+                            styles.badgePillText,
+                            status === 'graded'
+                              ? styles.badgeTextGraded
+                              : status === 'submitted'
+                                ? styles.badgeTextSubmitted
+                                : styles.badgeTextPending,
+                          ]}
+                        >
+                          {status}
+                        </Text>
+                      </View>
+
+                      {score != null && (
+                        <Text style={styles.scoreText}>
+                          {formatScoreDisplay(score)}/{assignment.max_score || 100}
+                        </Text>
+                      )}
                     </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </ScrollView>
@@ -200,14 +306,7 @@ export const AssignmentsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  toastContainer: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 76 : 68,
-    left: 16,
-    right: 16,
-    zIndex: 999,
+    backgroundColor: '#F8FAFC', // Slate-50 background matching Web LMS
   },
   scroll: {
     flex: 1,
@@ -218,65 +317,106 @@ const styles = StyleSheet.create({
     paddingBottom: 108,
   },
   headerBox: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   pageTitle: {
     fontFamily: FONTS.title,
     fontSize: 24,
     lineHeight: 32,
-    fontWeight: '700',
     color: '#0F172A',
-    letterSpacing: 0,
   },
   pageSubtitle: {
     fontFamily: FONTS.regular,
     fontSize: 14,
-    color: '#64748B',
+    lineHeight: 20,
+    color: '#475569',
     marginTop: 4,
   },
+  // Card List matching Web LMS with compact 12px mobile spacing
   cardList: {
-    gap: 14,
-  },
-  assignmentCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 16,
-    ...SHADOWS.sm,
-  },
-  assignmentCardInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 12,
   },
-  assignmentCardMain: {
-    flex: 1,
+  // Card styling matching Web LMS Card with compact 16px padding
+  assignmentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   assignmentTitle: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 14.5,
-    fontWeight: '600',
+    fontFamily: FONTS.medium,
+    fontSize: 14,
     color: '#0F172A',
     lineHeight: 20,
-    marginBottom: 4,
+    marginBottom: 3,
   },
   assignmentSubtitle: {
     fontFamily: FONTS.regular,
-    fontSize: 12.5,
+    fontSize: 12,
     color: '#475569',
-    lineHeight: 18,
+    lineHeight: 16,
+    marginBottom: 10,
   },
-  assignmentCardRight: {
-    alignItems: 'flex-end',
-    gap: 6,
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  assignmentScoreText: {
+  badgePill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 9999,
+  },
+  badgePending: {
+    backgroundColor: '#FFEDD5', // orange-100
+  },
+  badgeSubmitted: {
+    backgroundColor: '#DBEAFE', // blue-100
+  },
+  badgeGraded: {
+    backgroundColor: '#DCFCE7', // green-100
+  },
+  badgePillText: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
+    textTransform: 'capitalize',
+  },
+  badgeTextPending: {
+    color: '#9A3412', // orange-800
+  },
+  badgeTextSubmitted: {
+    color: '#1E40AF', // blue-800
+  },
+  badgeTextGraded: {
+    color: '#166534', // green-800
+  },
+  scoreText: {
     fontFamily: FONTS.bold,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
     color: '#16A34A',
+  },
+  emptyContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  emptyText: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: '#64748B',
   },
 });
 
