@@ -13,6 +13,7 @@ import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/nativ
 import AppHeader from '../../components/navigation/AppHeader';
 import { FONTS, SHADOWS } from '../../constants/theme';
 import { api } from '../../services/api';
+import { storage } from '../../services/storage';
 import {
   HouseLeaderboardRow,
   StudentRankRow,
@@ -96,6 +97,43 @@ export const LeaderboardScreen: React.FC = () => {
   const [history, setHistory] = useState<PointsLedgerItem[]>([]);
   const isFetchingRef = useRef<boolean>(false);
   const selectedHouseIdRef = useRef<number | null>(null);
+
+  // Instant SWR Cache-First Hydration (< 0.05s)
+  useEffect(() => {
+    let isMounted = true;
+    async function hydrateFromCache() {
+      try {
+        const session = await storage.getStudentSession();
+        const studentId = session?.studentId ?? session?.userId ?? 'default';
+        const cached = await storage.getCache<any>(`kreativa_cache_leaderboard_${studentId}`);
+        if (cached && isMounted) {
+          if (cached.summary) setSummary(cached.summary);
+          if (Array.isArray(cached.houses) && cached.houses.length > 0) setHouses(cached.houses);
+          if (cached.myHouseId != null) setMyHouseId(cached.myHouseId);
+          if (cached.myHouseName) setMyHouseName(cached.myHouseName);
+          if (cached.selectedHouseId != null) {
+            selectedHouseIdRef.current = cached.selectedHouseId;
+            setSelectedHouseId(cached.selectedHouseId);
+          }
+          if (Array.isArray(cached.contributors)) setContributors(cached.contributors);
+          if (Array.isArray(cached.jenjangRows)) setJenjangRows(cached.jenjangRows);
+          if (cached.schoolLevel) setSchoolLevel(cached.schoolLevel);
+          if (Array.isArray(cached.classRows)) setClassRows(cached.classRows);
+          if (Array.isArray(cached.houseSummary)) setHouseSummary(cached.houseSummary);
+          if (cached.className) setClassName(cached.className);
+          if (cached.myStudentId != null) setMyStudentId(cached.myStudentId);
+          if (Array.isArray(cached.history)) setHistory(cached.history);
+          setLoading(false); // Instant render!
+        }
+      } catch (err) {
+        console.warn('[Leaderboard Cache Hydration Warning]', err);
+      }
+    }
+    hydrateFromCache();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Scroll to top on navigation/focus
   useFocusEffect(
@@ -209,6 +247,31 @@ export const LeaderboardScreen: React.FC = () => {
       if (Array.isArray(histRes)) {
         setHistory(histRes);
       }
+
+      // Persist latest data snapshot to local cache in background
+      void (async () => {
+        try {
+          const session = await storage.getStudentSession();
+          const studentId = session?.studentId ?? session?.userId ?? 'default';
+          await storage.setCache(`kreativa_cache_leaderboard_${studentId}`, {
+            summary: sumRes || null,
+            houses: housesRes?.rows || [],
+            myHouseId: housesRes?.myHouseId ?? null,
+            myHouseName: housesRes?.myHouseName ?? null,
+            selectedHouseId: selectedHouseIdRef.current,
+            contributors: (housesRes?.contributors && Array.isArray(housesRes.contributors)) ? housesRes.contributors : contributors,
+            jenjangRows: jenjangRes?.rows || [],
+            schoolLevel: jenjangRes?.schoolLevel || 'high_school_igcse',
+            classRows: classRes?.rows || [],
+            houseSummary: classRes?.houseSummary || [],
+            className: classRes?.className || null,
+            myStudentId: classRes?.myStudentId ?? null,
+            history: histRes || [],
+          });
+        } catch (e) {
+          // ignore cache write errors
+        }
+      })();
     } catch (err: any) {
       console.warn('[Leaderboard Load Error]', err?.message || err);
     } finally {
