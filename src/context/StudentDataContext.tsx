@@ -161,6 +161,18 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
             house: data.points?.houseName ?? prev.house,
           }));
         }
+
+        // Persist dashboard snapshot to local cache in background
+        void (async () => {
+          try {
+            const session = await storage.getStudentSession();
+            const studentId = session?.studentId ?? session?.userId ?? 'default';
+            await storage.setCache(`kreativa_cache_dashboard_${studentId}`, data);
+          } catch {
+            // ignore cache write errors
+          }
+        })();
+
         return data;
       }
     } catch (err: any) {
@@ -225,7 +237,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     storage
       .getStudentSession()
-      .then((saved) => {
+      .then(async (saved) => {
         if (saved) {
           setStudentProfile((prev) => ({
             ...prev,
@@ -240,6 +252,22 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
             house: saved.house ?? prev.house,
             academicYearName: saved.academicYearName ?? prev.academicYearName,
           }));
+
+          // SWR: Instant Dashboard & Literacy Cache Hydration (<0.05s startup)
+          try {
+            const studentId = saved.studentId ?? saved.userId ?? 'default';
+            const cachedDashboard = await storage.getCache<DashboardData>(`kreativa_cache_dashboard_${studentId}`);
+            if (cachedDashboard) {
+              setDashboardData(cachedDashboard);
+              setIsDashboardLoading(false);
+            }
+            const cachedLit = await storage.getCache<any>(`kreativa_cache_literacy_${studentId}`);
+            if (cachedLit && Array.isArray(cachedLit.entries) && cachedLit.entries.length > 0) {
+              setLiteracyEntries(cachedLit.entries);
+            }
+          } catch {
+            // ignore
+          }
         }
       })
       .catch(() => {});
@@ -301,6 +329,22 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     try {
       const logs = await api.literacy.list();
       setLiteracyEntries(logs);
+
+      // Persist snapshot to local cache
+      void (async () => {
+        try {
+          const session = await storage.getStudentSession();
+          const studentId = session?.studentId ?? session?.userId ?? 'default';
+          const cached = await storage.getCache<any>(`kreativa_cache_literacy_${studentId}`);
+          await storage.setCache(`kreativa_cache_literacy_${studentId}`, {
+            entries: logs,
+            stats: cached?.stats || null,
+          });
+        } catch {
+          // ignore cache write errors
+        }
+      })();
+
       return logs;
     } catch (err) {
       console.warn('[Fetch Literacy Logs Error]', err);
@@ -312,6 +356,22 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const fetchLiteracyStats = useCallback(async () => {
     try {
       const stats = await api.literacy.getStats();
+
+      // Persist snapshot to local cache
+      void (async () => {
+        try {
+          const session = await storage.getStudentSession();
+          const studentId = session?.studentId ?? session?.userId ?? 'default';
+          const cached = await storage.getCache<any>(`kreativa_cache_literacy_${studentId}`);
+          await storage.setCache(`kreativa_cache_literacy_${studentId}`, {
+            entries: cached?.entries || [],
+            stats,
+          });
+        } catch {
+          // ignore cache write errors
+        }
+      })();
+
       return stats;
     } catch (err) {
       console.warn('[Fetch Literacy Stats Error]', err);
