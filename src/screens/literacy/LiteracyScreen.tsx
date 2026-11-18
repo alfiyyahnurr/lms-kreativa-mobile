@@ -39,6 +39,7 @@ import {
 import { LiteracyEntry, LiteracyFormData, LiteracyProgressStats } from '../../types';
 import { useStudentData } from '../../context/StudentDataContext';
 import { api } from '../../services/api';
+import { storage } from '../../services/storage';
 import AppHeader from '../../components/navigation/AppHeader';
 import { CalendarDatePickerModal } from '../../components/modals/CalendarDatePickerModal';
 import ToastAlert from '../../components/feedback/ToastAlert';
@@ -207,16 +208,59 @@ export const LiteracyScreen: React.FC = () => {
 
   const isRefreshingRef = useRef<boolean>(false);
 
+  // Instant SWR Cache-First Hydration (< 0.05s)
+  useEffect(() => {
+    let isMounted = true;
+    async function hydrateCache() {
+      try {
+        const session = await storage.getStudentSession();
+        const studentId = session?.studentId ?? session?.userId ?? 'default';
+        const cached = await storage.getCache<any>(`kreativa_cache_literacy_${studentId}`);
+        if (cached && isMounted) {
+          if (Array.isArray(cached.entries) && cached.entries.length > 0) {
+            setEntries(cached.entries);
+          }
+          if (cached.stats) {
+            setLiveStats(cached.stats);
+          }
+          setIsFetching(false); // Instant render!
+        }
+      } catch (e) {
+        console.warn('[Literacy Cache Hydration Warning]', e);
+      }
+    }
+    hydrateCache();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Load literacy logs and statistics whenever screen comes into focus
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      setIsFetching(true);
+      if (entries.length === 0) {
+        setIsFetching(true);
+      }
       Promise.all([fetchLiteracyLogs(), fetchLiteracyStats()])
         .then(([logs, stats]) => {
           if (isMounted) {
             if (Array.isArray(logs)) setEntries(logs);
             if (stats) setLiveStats(stats);
+
+            // Persist latest data snapshot to local cache
+            void (async () => {
+              try {
+                const session = await storage.getStudentSession();
+                const studentId = session?.studentId ?? session?.userId ?? 'default';
+                await storage.setCache(`kreativa_cache_literacy_${studentId}`, {
+                  entries: Array.isArray(logs) ? logs : entries,
+                  stats: stats || liveStats,
+                });
+              } catch {
+                // ignore
+              }
+            })();
           }
         })
         .finally(() => {
@@ -232,7 +276,7 @@ export const LiteracyScreen: React.FC = () => {
         resetForm();
         mainScrollRef.current?.scrollTo({ y: 0, animated: false });
       };
-    }, [fetchLiteracyLogs, fetchLiteracyStats, resetForm])
+    }, [fetchLiteracyLogs, fetchLiteracyStats, resetForm, entries.length, liveStats, entries])
   );
 
   // Pure Pull-to-Refresh handler for Literacy logs & stats (Guarded)
@@ -247,13 +291,27 @@ export const LiteracyScreen: React.FC = () => {
       ]);
       if (Array.isArray(logs)) setEntries(logs);
       if (stats) setLiveStats(stats);
+
+      // Persist snapshot to local cache
+      void (async () => {
+        try {
+          const session = await storage.getStudentSession();
+          const studentId = session?.studentId ?? session?.userId ?? 'default';
+          await storage.setCache(`kreativa_cache_literacy_${studentId}`, {
+            entries: Array.isArray(logs) ? logs : entries,
+            stats: stats || liveStats,
+          });
+        } catch {
+          // ignore
+        }
+      })();
     } catch (err) {
       console.warn('[Literacy onRefresh Error]', err);
     } finally {
       isRefreshingRef.current = false;
       setRefreshing(false);
     }
-  }, [fetchLiteracyLogs, fetchLiteracyStats]);
+  }, [fetchLiteracyLogs, fetchLiteracyStats, entries, liveStats]);
 
   // Reset when user taps tab icon or navigation triggers reset
   useEffect(() => {
