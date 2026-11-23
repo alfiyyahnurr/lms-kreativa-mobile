@@ -771,28 +771,28 @@ export const api = {
           const postEnabled = Boolean(raw.post_learning_enabled);
           const materialsList = Array.isArray(raw.materials)
             ? raw.materials.map((m: any) => {
-                const rawUrl = m.file_path || m.filePath || m.external_url || m.externalUrl || null;
-                const fileUrl = rawUrl
-                  ? rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
-                    ? rawUrl
-                    : `${API_BASE_URL}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`
-                  : null;
-                return {
-                  id: Number(m.id),
-                  title: m.title || m.file_name || 'Material',
-                  materialType: m.material_type || m.materialType || 'document',
-                  material_type: m.material_type || m.materialType || 'document',
-                  filePath: m.file_path || m.filePath || null,
-                  file_path: m.file_path || m.filePath || null,
-                  fileName: m.file_name || m.fileName || null,
-                  file_name: m.file_name || m.fileName || null,
-                  externalUrl: m.external_url || m.externalUrl || null,
-                  external_url: m.external_url || m.externalUrl || null,
-                  file_url: fileUrl,
-                  fileUrl: fileUrl,
-                  file_size: m.file_size_bytes ? `${(Number(m.file_size_bytes) / (1024 * 1024)).toFixed(1)} MB` : undefined,
-                };
-              })
+              const rawUrl = m.file_path || m.filePath || m.external_url || m.externalUrl || null;
+              const fileUrl = rawUrl
+                ? rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+                  ? rawUrl
+                  : `${API_BASE_URL}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`
+                : null;
+              return {
+                id: Number(m.id),
+                title: m.title || m.file_name || 'Material',
+                materialType: m.material_type || m.materialType || 'document',
+                material_type: m.material_type || m.materialType || 'document',
+                filePath: m.file_path || m.filePath || null,
+                file_path: m.file_path || m.filePath || null,
+                fileName: m.file_name || m.fileName || null,
+                file_name: m.file_name || m.fileName || null,
+                externalUrl: m.external_url || m.externalUrl || null,
+                external_url: m.external_url || m.externalUrl || null,
+                file_url: fileUrl,
+                fileUrl: fileUrl,
+                file_size: m.file_size_bytes ? `${(Number(m.file_size_bytes) / (1024 * 1024)).toFixed(1)} MB` : undefined,
+              };
+            })
             : [];
 
           return {
