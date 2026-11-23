@@ -20,29 +20,8 @@ import ErrorState from '../../components/feedback/ErrorState';
 import { FONTS } from '../../constants/theme';
 import AssignmentDetailView from './AssignmentDetailView';
 
-// =========================================================================
-// TEMPORARY TESTING DATA - WILL BE REMOVED AFTER TESTING
-// =========================================================================
-export const DUMMY_TEST_ASSIGNMENT: Assignment = {
-  id: 999999,
-  course_id: 1,
-  course: 'Computer Science & AI — S4 A 2026/2027',
-  course_name: 'Computer Science & AI — S4 A 2026/2027',
-  title: 'Practical Project: Mobile & Web Integration (Testing)',
-  description:
-    'This is a temporary dummy assignment created for testing submission workflow before deadline.\n\nYou can type your answer, pick/upload a file from your device, and submit your work to test the UI flow.',
-  dueDate: 'Dec 30, 2026',
-  due_date: '2026-12-30T23:59:59Z',
-  score: '—',
-  status: 'pending',
-  submission_status: null,
-  submission_score: null,
-  max_score: 100,
-  assignment_type: 'project',
-};
-
 export const AssignmentsScreen: React.FC = () => {
-  const [assignments, setAssignments] = useState<Assignment[]>([DUMMY_TEST_ASSIGNMENT]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isError, setIsError] = useState<boolean>(false);
@@ -88,7 +67,7 @@ export const AssignmentsScreen: React.FC = () => {
         const studentId = session?.studentId ?? session?.userId ?? 'default';
         const cached = await storage.getCache<Assignment[]>(`kreativa_cache_assignments_${studentId}`);
         if (cached && Array.isArray(cached) && cached.length > 0 && isMounted) {
-          setAssignments([DUMMY_TEST_ASSIGNMENT, ...cached.filter((a) => a.id !== 999999)]);
+          setAssignments(cached.filter((a) => a.id !== 999999));
           setIsLoading(false); // Instant render!
         }
       } catch (e) {
@@ -116,8 +95,7 @@ export const AssignmentsScreen: React.FC = () => {
       setErrorMessage(null);
 
       const data = await api.assignments.list();
-      // Prepend dummy testing assignment at the top for testing form submission
-      setAssignments([DUMMY_TEST_ASSIGNMENT, ...data.filter((a) => a.id !== 999999)]);
+      setAssignments(data.filter((a) => a.id !== 999999));
 
       // Persist latest data snapshot to local cache in background
       void (async () => {
@@ -133,8 +111,7 @@ export const AssignmentsScreen: React.FC = () => {
       console.error('Failed to load assignments:', err);
       setIsError(true);
       setErrorMessage(err?.message || 'Failed to load assignments from server.');
-      // Keep dummy testing assignment visible even on error for testing
-      setAssignments((prev) => (prev.length > 0 ? prev : [DUMMY_TEST_ASSIGNMENT]));
+      setAssignments((prev) => prev.filter((a) => a.id !== 999999));
     } finally {
       isFetchingRef.current = false;
       setIsLoading(false);

@@ -20,13 +20,80 @@ export interface StudentProfile {
 export interface Course {
   id: number;
   code: string;
+  subject_code?: string | null;
   name: string;
+  subject_name?: string | null;
   teacher: string;
+  teacher_name?: string | null;
   sessions: number;
-  status: 'active' | 'archived';
+  session_count?: number;
+  status: 'active' | 'archived' | string;
   class?: string;
-  description?: string;
+  class_name?: string | null;
+  description?: string | null;
   curriculum?: string;
+  curriculum_name?: string | null;
+  syllabus_title?: string | null;
+  course_format?: 'traditional' | 'self_paced' | string;
+  thumbnail_url?: string | null;
+  completion_pct?: number;
+  enrolled_count?: number;
+}
+
+export interface SelfPacedItem {
+  id: number;
+  section_id: number;
+  title: string;
+  item_type: 'video' | 'material' | 'quiz' | 'assignment' | string;
+  order_index: number;
+  content_html?: string | null;
+  video_url?: string | null;
+  attachment_url?: string | null;
+  attachment_name?: string | null;
+  duration_minutes?: number | null;
+  is_completed?: boolean;
+  confidence_level?: 'understood' | 'partial' | 'not_understood' | null;
+  is_locked?: boolean;
+  quiz_id?: number | null;
+  assignment_id?: number | null;
+}
+
+export interface SelfPacedSection {
+  id: number;
+  course_id: number;
+  title: string;
+  order_index: number;
+  items: SelfPacedItem[];
+}
+
+export interface CourseContentResponse {
+  course: Course;
+  sections: SelfPacedSection[];
+  total_items: number;
+  completed_items: number;
+  completion_percentage: number;
+}
+
+export interface CourseScoreDetail {
+  id: number;
+  category: string;
+  title: string;
+  score: number;
+  max_score: number;
+  weight?: number;
+  feedback?: string | null;
+  graded_at?: string | null;
+}
+
+export interface CourseForum {
+  id: number;
+  courseId: number;
+  title: string;
+  is_pinned?: boolean;
+  forum_type?: string;
+  post_count?: number;
+  postsCount?: number;
+  updatedAt?: string;
 }
 
 export interface Assignment {
@@ -98,8 +165,13 @@ export interface Quiz {
   course: string;
   duration: string;
   questions: number;
+  questionsCount?: number;
   score: string;
-  status: 'not started' | 'in progress' | 'completed';
+  status: 'not started' | 'in progress' | 'completed' | string;
+  attempt_status?: string | null;
+  attempt_score?: number | string | null;
+  date?: string;
+  time?: string;
 }
 
 export interface HabitItem {
@@ -352,7 +424,47 @@ export interface CourseSession {
   date: string;
   hasPreLearning: boolean;
   hasPostLearning: boolean;
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | string;
+  // Live database fields from lms_sessions
+  course_id?: number;
+  session_number?: number;
+  description?: string | null;
+  learning_objectives?: string | null;
+  session_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  location?: string | null;
+  pre_learning_enabled?: boolean;
+  pre_learning_type?: string | null;
+  pre_learning_minutes?: number | null;
+  pre_learning_instructions?: string | null;
+  pre_learning_url?: string | null;
+  pre_learning_file_path?: string | null;
+  pre_learning_file_name?: string | null;
+  post_learning_enabled?: boolean;
+  post_learning_type?: string | null;
+  post_learning_minutes?: number | null;
+  post_learning_instructions?: string | null;
+  post_learning_url?: string | null;
+  post_learning_file_path?: string | null;
+  post_learning_file_name?: string | null;
+  material_count?: number;
+}
+
+export interface SessionMaterialItem {
+  id: number | string;
+  title: string;
+  materialType?: string | null;
+  material_type?: string | null;
+  filePath?: string | null;
+  file_path?: string | null;
+  fileName?: string | null;
+  file_name?: string | null;
+  externalUrl?: string | null;
+  external_url?: string | null;
+  file_url?: string | null;
+  fileUrl?: string | null;
+  file_size?: string | null;
 }
 
 export interface SessionBeforeClass {
@@ -366,13 +478,14 @@ export interface SessionAfterClass {
   activityType: string;
   duration: string;
   prompt: string;
+  resourceUrl?: string;
 }
 
 export interface SessionInfoMeta {
   fullDate: string;
-  timeSlot: string;
-  location: string;
-  independentStudy: string[];
+  timeSlot?: string;
+  location?: string;
+  independentStudy?: string[];
 }
 
 export interface CourseSessionDetail extends CourseSession {
@@ -383,6 +496,7 @@ export interface CourseSessionDetail extends CourseSession {
   learningObjectives: string;
   inClassContent: string;
   materials: string[];
+  sessionMaterials?: SessionMaterialItem[];
   afterClass: SessionAfterClass;
   sessionInfo: SessionInfoMeta;
 }

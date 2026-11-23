@@ -101,8 +101,6 @@ export const QuizzesScreen: React.FC = () => {
             icon="help-circle-outline"
             title="No Quizzes Available"
             subtitle="There are currently no checkpoint quizzes or tests scheduled."
-            actionLabel="Refresh List"
-            onAction={refreshAllData}
           />
         ) : (
           /* Pure Card List matching Web quizzes-list-client */

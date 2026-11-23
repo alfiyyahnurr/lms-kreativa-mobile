@@ -55,17 +55,6 @@ export const AssignmentDetailView: React.FC<AssignmentDetailViewProps> = ({
 
   // Fetch full live assignment & submission detail from backend
   const fetchDetail = useCallback(async () => {
-    // If dummy testing assignment, use mock detail without network request
-    if (initialAssignment.id === 999999) {
-      setIsLoadingDetail(false);
-      setDetailData({
-        assignment: initialAssignment,
-        submission: null,
-        files: [],
-      });
-      return;
-    }
-
     try {
       setIsLoadingDetail(true);
       const res = await api.assignments.getAssignment(initialAssignment.id);
@@ -194,36 +183,23 @@ export const AssignmentDetailView: React.FC<AssignmentDetailViewProps> = ({
         setIsUploading(true);
 
         try {
-          // If dummy testing assignment, simulate instant successful upload
-          if (assignment.id === 999999) {
-            const simulatedUrl = `https://mock.blob.kreativa.sch.id/${Date.now()}-${asset.name}`;
-            setFiles((prev) => [
-              ...prev,
-              {
-                url: simulatedUrl,
-                name: asset.name,
-                size: asset.size || 0,
-              },
-            ]);
-          } else {
-            const formData = new FormData();
-            formData.append('file', {
-              uri: asset.uri,
-              name: asset.name,
-              type: asset.mimeType || 'application/octet-stream',
-            } as any);
-            formData.append('folder', 'submissions');
+          const formData = new FormData();
+          formData.append('file', {
+            uri: asset.uri,
+            name: asset.name,
+            type: asset.mimeType || 'application/octet-stream',
+          } as any);
+          formData.append('folder', 'submissions');
 
-            const res = await api.upload.uploadFile(formData);
-            setFiles((prev) => [
-              ...prev,
-              {
-                url: res.url,
-                name: asset.name,
-                size: asset.size || 0,
-              },
-            ]);
-          }
+          const res = await api.upload.uploadFile(formData);
+          setFiles((prev) => [
+            ...prev,
+            {
+              url: res.url,
+              name: asset.name,
+              size: asset.size || 0,
+            },
+          ]);
         } catch (err: any) {
           console.error('File upload error:', err);
           setErrorMessage(
@@ -257,45 +233,6 @@ export const AssignmentDetailView: React.FC<AssignmentDetailViewProps> = ({
       setIsSubmitting(true);
       setErrorMessage(null);
 
-      // Handle dummy testing assignment (id: 999999) mock submission
-      if (assignment.id === 999999) {
-        setTimeout(() => {
-          setIsSubmitting(false);
-          const nowIso = new Date().toISOString();
-          setDetailData({
-            assignment: {
-              ...assignment,
-              status: 'submitted',
-              submission_status: 'submitted',
-            },
-            submission: {
-              id: 999999,
-              assignment_id: 999999,
-              student_id: 1,
-              attempt_number: 1,
-              submission_text: submissionText.trim() || null,
-              submission_url: fileUrls.length > 0 ? fileUrls.join(',') : null,
-              status: 'submitted',
-              score: null,
-              feedback: null,
-              graded_at: null,
-              submitted_at: nowIso,
-              updated_at: nowIso,
-            },
-            files: [],
-          });
-          setToastMessage(
-            canResubmit
-              ? 'Assignment successfully resubmitted!'
-              : 'Assignment successfully submitted!'
-          );
-          if (onSubmitSuccess) {
-            onSubmitSuccess(999999, submissionText);
-          }
-        }, 500);
-        return;
-      }
-
       await api.assignments.submit(assignment.id, {
         submissionText: submissionText.trim() || undefined,
         submissionUrl: fileUrls.length > 0 ? fileUrls.join(',') : undefined,
@@ -317,9 +254,7 @@ export const AssignmentDetailView: React.FC<AssignmentDetailViewProps> = ({
       console.error('Submit error:', err);
       setErrorMessage(err?.message || 'Failed to submit assignment. Please try again.');
     } finally {
-      if (assignment.id !== 999999) {
-        setIsSubmitting(false);
-      }
+      setIsSubmitting(false);
     }
   };
 

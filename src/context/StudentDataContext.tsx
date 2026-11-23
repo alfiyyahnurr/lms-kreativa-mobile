@@ -24,7 +24,6 @@ import {
   LEADERBOARD_HOUSES,
   LEADERBOARD_JENJANG,
   HABIT_GROUPS_INITIAL,
-  COURSES_DATA,
   ASSIGNMENTS_DATA,
   QUIZZES_DATA,
   EXAMS_DATA,
@@ -95,6 +94,8 @@ interface StudentDataContextType {
 
   // Courses & Academic Data (API-ready getters)
   courses: Course[];
+  isCoursesLoading: boolean;
+  fetchCourses: (isRefresh?: boolean) => Promise<Course[]>;
   assignments: Assignment[];
   quizzes: Quiz[];
   exams: ExamItem[];
@@ -189,6 +190,42 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return null;
   }, []);
 
+  // Live Courses State & Mutex Lock
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isCoursesLoading, setIsCoursesLoading] = useState<boolean>(false);
+  const coursesRef = useRef<Course[]>([]);
+  coursesRef.current = courses;
+  const isCoursesFetchingRef = useRef<boolean>(false);
+
+  const fetchCourses = useCallback(async (isRefresh = false): Promise<Course[]> => {
+    if (isCoursesFetchingRef.current) return coursesRef.current;
+    isCoursesFetchingRef.current = true;
+    if (!isRefresh && coursesRef.current.length === 0) {
+      setIsCoursesLoading(true);
+    }
+    try {
+      const liveCourses = await api.courses.list();
+      if (Array.isArray(liveCourses)) {
+        setCourses(liveCourses);
+        coursesRef.current = liveCourses;
+        try {
+          const session = await storage.getStudentSession();
+          const studentId = session?.studentId ?? session?.userId ?? 'default';
+          await storage.setCache(`kreativa_cache_courses_${studentId}`, liveCourses);
+        } catch {
+          // ignore cache write errors
+        }
+        return liveCourses;
+      }
+    } catch (err: any) {
+      console.warn('[Courses Fetch Warning]', err?.message || err);
+    } finally {
+      isCoursesFetchingRef.current = false;
+      setIsCoursesLoading(false);
+    }
+    return coursesRef.current;
+  }, []);
+
   const isRefreshingAllRef = useRef(false);
   const refreshAllData = useCallback(async () => {
     if (isRefreshingAllRef.current) return;
@@ -216,6 +253,13 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       } catch (e) {
         // ignore
       }
+
+      // Sync courses from live backend API
+      try {
+        await fetchCourses(true);
+      } catch (e) {
+        // ignore
+      }
     } catch (err: any) {
       setIsError(true);
       setErrorMessage(err?.message || 'Failed to refresh data. Please try again.');
@@ -223,7 +267,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       isRefreshingAllRef.current = false;
       setIsRefreshing(false);
     }
-  }, [fetchDashboardData]);
+  }, [fetchDashboardData, fetchCourses]);
 
   // 1. Habits Per Date State (anchored to static October historical data, with today empty)
   const [habitsByDate, setHabitsByDate] = useState<Record<string, HabitGroup[]>>(() =>
@@ -270,6 +314,11 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
             const cachedLit = await storage.getCache<any>(`kreativa_cache_literacy_${studentId}`);
             if (cachedLit && Array.isArray(cachedLit.entries) && cachedLit.entries.length > 0) {
               setLiteracyEntries(cachedLit.entries);
+            }
+            const cachedCourses = await storage.getCache<Course[]>(`kreativa_cache_courses_${studentId}`);
+            if (cachedCourses && Array.isArray(cachedCourses) && cachedCourses.length > 0) {
+              setCourses(cachedCourses);
+              coursesRef.current = cachedCourses;
             }
           } catch {
             // ignore
@@ -830,7 +879,9 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
         toastList,
         showToast,
         dismissToast,
-        courses: COURSES_DATA,
+        courses,
+        isCoursesLoading,
+        fetchCourses,
         assignments: ASSIGNMENTS_DATA,
         quizzes: QUIZZES_DATA,
         exams: EXAMS_DATA,

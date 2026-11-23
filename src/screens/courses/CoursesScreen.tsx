@@ -1,6 +1,14 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  Image,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useStudentData } from '../../context/StudentDataContext';
 import { Course } from '../../types';
@@ -11,50 +19,107 @@ import EmptyState from '../../components/feedback/EmptyState';
 import ErrorState from '../../components/feedback/ErrorState';
 import CardSkeleton from '../../components/feedback/CardSkeleton';
 
-interface CourseCardProps {
+interface SelfPacedCardProps {
   course: Course;
   onPress: () => void;
-  index: number;
 }
 
-const CourseCard: React.FC<CourseCardProps> = ({ course, onPress, index }) => {
+const SelfPacedCard: React.FC<SelfPacedCardProps> = ({ course, onPress }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const pct = Math.min(100, Math.max(0, Number(course.completion_pct) || 0));
+  const initial = (course.name || course.subject_name || 'C').charAt(0).toUpperCase();
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.85}
+      activeOpacity={0.88}
       // @ts-ignore - web hover props
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      style={[
-        styles.courseCard,
-        isHovered && styles.courseCardHovered,
-      ]}
+      style={[styles.selfPacedCard, isHovered && styles.cardHovered]}
     >
-      {/* Top Badges Row matching Screenshot */}
-      <View style={styles.badgeRow}>
-        <View style={styles.codeBadge}>
-          <Text style={styles.codeBadgeText}>{course.code}</Text>
-        </View>
-        <View style={styles.statusPill}>
-          <Text style={styles.statusPillText}>active</Text>
+      {/* Thumbnail Banner */}
+      <View style={styles.thumbnailContainer}>
+        {course.thumbnail_url ? (
+          <Image
+            source={{ uri: course.thumbnail_url }}
+            style={styles.thumbnailImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.thumbnailFallback}>
+            <Text style={styles.thumbnailInitial}>{initial}</Text>
+          </View>
+        )}
+        <View style={styles.selfPacedBadge}>
+          <Text style={styles.selfPacedBadgeText}>Self-Paced</Text>
         </View>
       </View>
 
-      {/* Course Title matching Screenshot */}
+      {/* Card Body */}
+      <View style={styles.selfPacedBody}>
+        <Text style={styles.courseTitle} numberOfLines={2}>
+          {course.name || course.subject_name}
+        </Text>
+        <Text style={styles.teacherText} numberOfLines={1}>
+          {course.teacher_name || course.teacher || 'No teacher assigned'}
+        </Text>
+
+        {/* Progress Bar */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBarTrack}>
+            <View style={[styles.progressBarFill, { width: `${pct}%` }]} />
+          </View>
+          <Text style={styles.progressText}>{pct}% Complete</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+interface ClassCourseCardProps {
+  course: Course;
+  onPress: () => void;
+}
+
+const ClassCourseCard: React.FC<ClassCourseCardProps> = ({ course, onPress }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const sessionCount = Number(course.session_count ?? course.sessions ?? 0);
+  const code = course.subject_code || course.code || 'CRS';
+  const status = course.status || 'active';
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.88}
+      // @ts-ignore - web hover props
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={[styles.classCard, isHovered && styles.cardHovered]}
+    >
+      {/* Top Badges Row */}
+      <View style={styles.badgeRow}>
+        <View style={styles.codeBadge}>
+          <Text style={styles.codeBadgeText}>{code}</Text>
+        </View>
+        <View style={styles.statusPill}>
+          <Text style={styles.statusPillText}>{status}</Text>
+        </View>
+      </View>
+
+      {/* Course Title */}
       <Text style={styles.courseTitle} numberOfLines={2}>
-        {course.name}
+        {course.name || course.subject_name}
       </Text>
 
-      {/* Teacher Name matching Screenshot */}
+      {/* Teacher Name */}
       <Text style={styles.teacherText} numberOfLines={1}>
-        {course.teacher}
+        {course.teacher_name || course.teacher || 'No teacher assigned'}
       </Text>
 
-      {/* Sessions Count matching Screenshot */}
+      {/* Sessions Count */}
       <Text style={styles.sessionText}>
-        {course.sessions} sessions
+        {sessionCount} sessions
       </Text>
     </TouchableOpacity>
   );
@@ -64,29 +129,40 @@ export const CoursesScreen: React.FC = () => {
   const {
     courses,
     studentProfile,
+    isCoursesLoading,
+    fetchCourses,
     isLoading,
     isRefreshing,
     isError,
     errorMessage,
     refreshAllData,
   } = useStudentData();
+
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [localRefreshing, setLocalRefreshing] = useState(false);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const scrollRef = useRef<any>(null);
+  const isFetchingRef = useRef(false);
 
-  // 1. Reset to main course list and scroll to top when user navigates to this screen
+  // Focus effect: fetch fresh courses on focus safely with mutex
   useFocusEffect(
     useCallback(() => {
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      fetchCourses()
+        .catch(() => {})
+        .finally(() => {
+          isFetchingRef.current = false;
+        });
+
       return () => {
-        setSelectedCourse(null);
-        scrollRef.current?.scrollTo({ y: 0, animated: false });
+        isFetchingRef.current = false;
       };
-    }, [])
+    }, [fetchCourses])
   );
 
-  // 2. Reset if user taps the Courses tab button in bottom nav
+  // Tab reset handler
   useEffect(() => {
     const unsubscribe = navigation?.addListener?.('tabPress', () => {
       setSelectedCourse(null);
@@ -95,13 +171,31 @@ export const CoursesScreen: React.FC = () => {
     return unsubscribe;
   }, [navigation]);
 
-  // 3. Reset when navigation params signal a reset
+  // Route reset param handler
   useEffect(() => {
     if (route.params?.resetKey) {
       setSelectedCourse(null);
       scrollRef.current?.scrollTo({ y: 0, animated: false });
     }
   }, [route.params?.resetKey]);
+
+  // Handle pull to refresh
+  const handleRefresh = async () => {
+    setLocalRefreshing(true);
+    try {
+      await fetchCourses(true);
+    } catch {
+      // ignore
+    } finally {
+      setLocalRefreshing(false);
+    }
+  };
+
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, 16) + 110;
+
+  const selfPacedCourses = courses.filter((c) => c.course_format === 'self_paced');
+  const classCourses = courses.filter((c) => c.course_format !== 'self_paced');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -119,53 +213,77 @@ export const CoursesScreen: React.FC = () => {
         <ScrollView
           ref={scrollRef}
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPadding }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           refreshControl={
             <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={refreshAllData}
-              colors={['#4F089F']}
-              tintColor="#4F089F"
+              refreshing={localRefreshing || isRefreshing}
+              onRefresh={handleRefresh}
+              colors={['#2563EB']}
+              tintColor="#2563EB"
             />
           }
         >
           {/* Header Title */}
           <View style={styles.headerBox}>
             <Text style={styles.pageTitle}>My Courses</Text>
-            <Text style={styles.pageSubtitle}>{studentProfile?.academicYearName || 'Academic Year 2026/2027'}</Text>
+            <Text style={styles.pageSubtitle}>
+              Academic Year {studentProfile?.academicYearName || '2026/2027'}
+            </Text>
           </View>
 
           {/* Data State Guards */}
-          {isLoading ? (
+          {isCoursesLoading && courses.length === 0 ? (
             <CardSkeleton count={3} variant="course" />
           ) : isError ? (
             <ErrorState
               title="Failed to Load Courses"
               subtitle={errorMessage || undefined}
-              onRetry={refreshAllData}
+              onRetry={() => fetchCourses(true)}
             />
           ) : courses.length === 0 ? (
             <EmptyState
               icon="book-outline"
               title="No Enrolled Courses"
               subtitle="You are not currently enrolled in any academic courses for this semester."
-              actionLabel="Refresh List"
-              onAction={refreshAllData}
             />
           ) : (
-            /* Pure Cards List matching Image 3 with Hover Effect */
-            <View style={styles.cardList}>
-              {courses.map((course, idx) => (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  index={idx}
-                  onPress={() => setSelectedCourse(course)}
-                />
-              ))}
+            <View style={styles.contentSections}>
+              {/* 1. Self-Paced Courses Section */}
+              {selfPacedCourses.length > 0 && (
+                <View style={styles.sectionBlock}>
+                  <Text style={styles.sectionTitle}>SELF-PACED COURSES</Text>
+                  <View style={styles.cardList}>
+                    {selfPacedCourses.map((c) => (
+                      <SelfPacedCard
+                        key={c.id}
+                        course={c}
+                        onPress={() => setSelectedCourse(c)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* 2. Class-Based Courses Section */}
+              {classCourses.length > 0 && (
+                <View style={styles.sectionBlock}>
+                  {selfPacedCourses.length > 0 && (
+                    <Text style={styles.sectionTitle}>CLASS-BASED COURSES</Text>
+                  )}
+                  <View style={styles.cardList}>
+                    {classCourses.map((c) => (
+                      <ClassCourseCard
+                        key={c.id}
+                        course={c}
+                        onPress={() => setSelectedCourse(c)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
           )}
         </ScrollView>
@@ -204,10 +322,95 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginTop: 4,
   },
+  contentSections: {
+    gap: 24,
+  },
+  sectionBlock: {
+    gap: 12,
+  },
+  sectionTitle: {
+    fontFamily: FONTS.bold,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
   cardList: {
     gap: 16,
   },
-  courseCard: {
+  selfPacedCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+    ...SHADOWS.sm,
+  },
+  thumbnailContainer: {
+    width: '100%',
+    height: 140,
+    backgroundColor: '#4F46E5',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbnailFallback: {
+    flex: 1,
+    backgroundColor: '#4338CA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbnailInitial: {
+    fontFamily: FONTS.bold,
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    opacity: 0.25,
+  },
+  selfPacedBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+  },
+  selfPacedBadgeText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4338CA',
+  },
+  selfPacedBody: {
+    padding: 16,
+  },
+  progressContainer: {
+    marginTop: 10,
+    gap: 6,
+  },
+  progressBarTrack: {
+    height: 7,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#4F46E5',
+    borderRadius: 999,
+  },
+  progressText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4338CA',
+  },
+  classCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
@@ -218,7 +421,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     ...SHADOWS.sm,
   },
-  courseCardHovered: {
+  cardHovered: {
     transform: [{ translateY: -2 }],
     borderTopColor: '#BFDBFE',
     borderRightColor: '#BFDBFE',
@@ -273,7 +476,7 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.regular,
     fontSize: 13.5,
     color: '#64748B',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sessionText: {
     fontFamily: FONTS.medium,

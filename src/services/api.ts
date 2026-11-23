@@ -33,11 +33,13 @@ import {
   PublishedCardSummary,
   PublishedCard,
   DashboardData,
+  CourseContentResponse,
+  CourseScoreDetail,
+  CourseForum,
 } from '../types';
 
 import {
   STUDENT_PROFILE,
-  COURSES_DATA,
   ASSIGNMENTS_DATA,
   QUIZZES_DATA,
   EXAMS_DATA,
@@ -50,8 +52,6 @@ import {
   DUMMY_LITERACY_ENTRIES,
   INITIAL_LITERACY_PROGRESS,
   WEEKLY_SCHEDULE,
-  getCourseSessions,
-  getCourseSessionDetail,
   getWeeklyPlanForWeek,
   HABIT_GROUPS_INITIAL,
   MOCK_PUBLISHED_CARDS_SUMMARY,
@@ -600,71 +600,362 @@ export const api = {
   courses: {
     // GET {{baseUrl}}/api/courses
     list: async (): Promise<Course[]> => {
-      return requestApi<Course[]>('/api/courses', 'GET', undefined, [...COURSES_DATA]);
+      try {
+        const res = await requestApi<any>('/api/courses', 'GET', undefined, null);
+        const rawList = res?.courses || (Array.isArray(res) ? res : []);
+        if (Array.isArray(rawList)) {
+          return rawList.map((c: any) => ({
+            id: Number(c.id),
+            code: c.subject_code || c.code || 'CRS',
+            subject_code: c.subject_code ?? null,
+            name: c.name || c.subject_name || 'Course',
+            subject_name: c.subject_name ?? null,
+            teacher: c.teacher_name || c.teacher || 'No teacher assigned',
+            teacher_name: c.teacher_name ?? null,
+            sessions: Number(c.session_count ?? c.sessions ?? 0),
+            session_count: Number(c.session_count ?? c.sessions ?? 0),
+            status: c.status || 'active',
+            class: c.class_name || c.class,
+            class_name: c.class_name ?? null,
+            curriculum: c.curriculum_name || c.curriculum,
+            curriculum_name: c.curriculum_name ?? null,
+            syllabus_title: c.syllabus_title ?? null,
+            course_format: c.course_format || 'class',
+            thumbnail_url: c.thumbnail_url ?? null,
+            completion_pct: Number(c.completion_pct) || 0,
+            enrolled_count: Number(c.enrolled_count) || 0,
+            description: c.description ?? null,
+          }));
+        }
+      } catch (e) {
+        console.warn('[Courses API List Warning]', e);
+      }
+      return [];
     },
 
     // GET {{baseUrl}}/api/courses/{{courseId}}
-    getCourse: async (courseId: number): Promise<Course> => {
-      const found = COURSES_DATA.find((c) => c.id === courseId);
-      return requestApi<Course>(`/api/courses/${courseId}`, 'GET', undefined, found || COURSES_DATA[0]);
+    getCourse: async (courseId: number): Promise<Course | null> => {
+      try {
+        const c = await requestApi<any>(`/api/courses/${courseId}`, 'GET', undefined, null);
+        if (c && c.id) {
+          return {
+            id: Number(c.id),
+            code: c.subject_code || c.code || 'CRS',
+            subject_code: c.subject_code ?? null,
+            name: c.name || c.subject_name || 'Course',
+            subject_name: c.subject_name ?? null,
+            teacher: c.teacher_name || c.teacher || 'No teacher assigned',
+            teacher_name: c.teacher_name ?? null,
+            sessions: Number(c.session_count ?? c.sessions ?? 0),
+            session_count: Number(c.session_count ?? c.sessions ?? 0),
+            status: c.status || 'active',
+            class: c.class_name || c.class,
+            class_name: c.class_name ?? null,
+            curriculum: c.curriculum_name || c.curriculum,
+            curriculum_name: c.curriculum_name ?? null,
+            syllabus_title: c.syllabus_title ?? null,
+            course_format: c.course_format || 'traditional',
+            thumbnail_url: c.thumbnail_url ?? null,
+            completion_pct: Number(c.completion_pct) || 0,
+            enrolled_count: Number(c.enrolled_count) || 0,
+            description: c.description ?? null,
+          };
+        }
+      } catch (e) {
+        console.warn('[Courses API Get Course Warning]', e);
+      }
+      return null;
+    },
+
+    // GET {{baseUrl}}/api/courses/{{courseId}}/content (Self-Paced Content)
+    getContent: async (courseId: number): Promise<CourseContentResponse | null> => {
+      return requestApi<CourseContentResponse | null>(
+        `/api/courses/${courseId}/content`,
+        'GET',
+        undefined,
+        null
+      );
+    },
+
+    // POST {{baseUrl}}/api/course-items/{{itemId}}/complete
+    completeItem: async (itemId: number): Promise<{ completion_pct: number } | null> => {
+      return requestApi<{ completion_pct: number } | null>(
+        `/api/course-items/${itemId}/complete`,
+        'POST',
+        {},
+        null
+      );
+    },
+
+    // POST {{baseUrl}}/api/course-items/{{itemId}}/confidence
+    saveConfidence: async (itemId: number, level: string): Promise<any> => {
+      return requestApi<any>(
+        `/api/course-items/${itemId}/confidence`,
+        'POST',
+        { level },
+        null
+      );
+    },
+
+    // GET {{baseUrl}}/api/scores/{{courseId}}
+    getScores: async (courseId: number): Promise<CourseScoreDetail[]> => {
+      return requestApi<CourseScoreDetail[]>(
+        `/api/scores/${courseId}`,
+        'GET',
+        undefined,
+        []
+      );
     },
 
     // GET {{baseUrl}}/api/courses/{{courseId}}/sessions
-    getSessions: async (courseId: number, courseName: string, totalSessions: number): Promise<CourseSession[]> => {
-      return requestApi<CourseSession[]>(
-        `/api/courses/${courseId}/sessions`,
-        'GET',
-        undefined,
-        getCourseSessions(courseId, courseName, totalSessions)
-      );
+    getSessions: async (courseId: number, courseName?: string, totalSessions?: number): Promise<CourseSession[]> => {
+      try {
+        const raw = await requestApi<any[]>(
+          `/api/courses/${courseId}/sessions`,
+          'GET',
+          undefined,
+          []
+        );
+        if (Array.isArray(raw)) {
+          return raw.map((s: any, idx: number) => ({
+            id: String(s.id),
+            courseId: Number(courseId),
+            sessionNumber: Number(s.session_number ?? idx + 1),
+            title: s.title || `Session ${idx + 1}`,
+            date: s.session_date ? String(s.session_date).slice(0, 10) : 'TBD',
+            hasPreLearning: Boolean(s.pre_learning_enabled),
+            hasPostLearning: Boolean(s.post_learning_enabled),
+            status: (s.status || 'scheduled') as any,
+            course_id: Number(courseId),
+            session_number: Number(s.session_number ?? idx + 1),
+            session_date: s.session_date ?? null,
+            start_time: s.start_time ?? null,
+            end_time: s.end_time ?? null,
+            location: s.location ?? null,
+            description: s.description ?? null,
+            learning_objectives: s.learning_objectives ?? null,
+            pre_learning_enabled: Boolean(s.pre_learning_enabled),
+            pre_learning_type: s.pre_learning_type ?? null,
+            pre_learning_minutes: s.pre_learning_minutes ? Number(s.pre_learning_minutes) : null,
+            pre_learning_instructions: s.pre_learning_instructions ?? null,
+            pre_learning_url: s.pre_learning_url ?? null,
+            pre_learning_file_path: s.pre_learning_file_path ?? null,
+            pre_learning_file_name: s.pre_learning_file_name ?? null,
+            post_learning_enabled: Boolean(s.post_learning_enabled),
+            post_learning_type: s.post_learning_type ?? null,
+            post_learning_minutes: s.post_learning_minutes ? Number(s.post_learning_minutes) : null,
+            post_learning_instructions: s.post_learning_instructions ?? null,
+            post_learning_url: s.post_learning_url ?? null,
+            post_learning_file_path: s.post_learning_file_path ?? null,
+            post_learning_file_name: s.post_learning_file_name ?? null,
+            material_count: Number(s.material_count ?? 0),
+          }));
+        }
+      } catch (e) {
+        console.warn('[Courses API Sessions Warning]', e);
+      }
+      return [];
     },
 
     // GET {{baseUrl}}/api/sessions/{{sessionId}}
-    getSessionDetail: async (session: CourseSession, course?: Course): Promise<CourseSessionDetail> => {
-      return requestApi<CourseSessionDetail>(
-        `/api/sessions/${session.id}`,
-        'GET',
-        undefined,
-        getCourseSessionDetail(session, course)
-      );
+    getSessionDetail: async (session: CourseSession, course?: Course): Promise<CourseSessionDetail | null> => {
+      try {
+        const raw = await requestApi<any>(
+          `/api/sessions/${session.id}`,
+          'GET',
+          undefined,
+          null
+        );
+        if (raw && raw.id) {
+          const preEnabled = Boolean(raw.pre_learning_enabled);
+          const postEnabled = Boolean(raw.post_learning_enabled);
+          const materialsList = Array.isArray(raw.materials)
+            ? raw.materials.map((m: any) => {
+                const rawUrl = m.file_path || m.filePath || m.external_url || m.externalUrl || null;
+                const fileUrl = rawUrl
+                  ? rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+                    ? rawUrl
+                    : `${API_BASE_URL}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`
+                  : null;
+                return {
+                  id: Number(m.id),
+                  title: m.title || m.file_name || 'Material',
+                  materialType: m.material_type || m.materialType || 'document',
+                  material_type: m.material_type || m.materialType || 'document',
+                  filePath: m.file_path || m.filePath || null,
+                  file_path: m.file_path || m.filePath || null,
+                  fileName: m.file_name || m.fileName || null,
+                  file_name: m.file_name || m.fileName || null,
+                  externalUrl: m.external_url || m.externalUrl || null,
+                  external_url: m.external_url || m.externalUrl || null,
+                  file_url: fileUrl,
+                  fileUrl: fileUrl,
+                  file_size: m.file_size_bytes ? `${(Number(m.file_size_bytes) / (1024 * 1024)).toFixed(1)} MB` : undefined,
+                };
+              })
+            : [];
+
+          return {
+            id: String(raw.id),
+            courseId: Number(raw.course_id ?? session.courseId),
+            sessionNumber: Number(raw.session_number ?? session.sessionNumber),
+            title: raw.title || session.title,
+            date: raw.session_date ? String(raw.session_date).slice(0, 10) : session.date,
+            hasPreLearning: preEnabled,
+            hasPostLearning: postEnabled,
+            status: (raw.status || session.status) as any,
+            course_id: Number(raw.course_id ?? session.courseId),
+            session_number: Number(raw.session_number ?? session.sessionNumber),
+            session_date: raw.session_date ?? null,
+            start_time: raw.start_time ?? null,
+            end_time: raw.end_time ?? null,
+            location: raw.location ?? null,
+            description: raw.description ?? null,
+            learning_objectives: raw.learning_objectives ?? null,
+            pre_learning_enabled: preEnabled,
+            pre_learning_type: raw.pre_learning_type ?? null,
+            pre_learning_minutes: raw.pre_learning_minutes ? Number(raw.pre_learning_minutes) : null,
+            pre_learning_instructions: raw.pre_learning_instructions ?? null,
+            pre_learning_url: raw.pre_learning_url ?? null,
+            pre_learning_file_path: raw.pre_learning_file_path ?? null,
+            pre_learning_file_name: raw.pre_learning_file_name ?? null,
+            post_learning_enabled: postEnabled,
+            post_learning_type: raw.post_learning_type ?? null,
+            post_learning_minutes: raw.post_learning_minutes ? Number(raw.post_learning_minutes) : null,
+            post_learning_instructions: raw.post_learning_instructions ?? null,
+            post_learning_url: raw.post_learning_url ?? null,
+            post_learning_file_path: raw.post_learning_file_path ?? null,
+            post_learning_file_name: raw.post_learning_file_name ?? null,
+            material_count: materialsList.length,
+            courseName: raw.course_name || course?.name || 'Course',
+            classCode: raw.class_name || course?.class || 'Class',
+            academicYear: '2026/2027',
+            beforeClass: {
+              activityType: raw.pre_learning_type || (preEnabled ? 'Pre-Learning' : 'None'),
+              duration: raw.pre_learning_minutes ? `${raw.pre_learning_minutes} mins` : (preEnabled ? '15 mins' : '—'),
+              prompt: raw.pre_learning_instructions || 'No pre-class instructions provided.',
+              resourceUrl: raw.pre_learning_url || (raw.pre_learning_file_path
+                ? raw.pre_learning_file_path.startsWith('http')
+                  ? raw.pre_learning_file_path
+                  : `${API_BASE_URL}${raw.pre_learning_file_path.startsWith('/') ? '' : '/'}${raw.pre_learning_file_path}`
+                : undefined),
+            },
+            learningObjectives: raw.learning_objectives || 'No learning objectives specified.',
+            inClassContent: raw.description || 'No in-class description provided.',
+            materials: materialsList.map((m: any) => m.title),
+            sessionMaterials: materialsList,
+            afterClass: {
+              activityType: raw.post_learning_type || (postEnabled ? 'Post-Learning' : 'None'),
+              duration: raw.post_learning_minutes ? `${raw.post_learning_minutes} mins` : (postEnabled ? '10 mins' : '—'),
+              prompt: raw.post_learning_instructions || 'No post-class instructions specified.',
+              resourceUrl: raw.post_learning_url || (raw.post_learning_file_path
+                ? raw.post_learning_file_path.startsWith('http')
+                  ? raw.post_learning_file_path
+                  : `${API_BASE_URL}${raw.post_learning_file_path.startsWith('/') ? '' : '/'}${raw.post_learning_file_path}`
+                : undefined),
+            },
+            sessionInfo: {
+              fullDate: raw.session_date ? String(raw.session_date).slice(0, 10) : session.date,
+              timeSlot: raw.start_time && raw.end_time ? `${String(raw.start_time).slice(0, 5)} - ${String(raw.end_time).slice(0, 5)}` : undefined,
+              location: raw.location || undefined,
+            },
+          };
+        }
+      } catch (e) {
+        console.warn('[Courses API Session Detail Warning]', e);
+      }
+      return null;
     },
 
     // GET {{baseUrl}}/api/courses/{{courseId}}/assignments
     getAssignments: async (courseId: number): Promise<Assignment[]> => {
-      return requestApi<Assignment[]>(
-        `/api/courses/${courseId}/assignments`,
-        'GET',
-        undefined,
-        ASSIGNMENTS_DATA.filter((a) => a.course.toLowerCase().includes(String(courseId)))
-      );
+      try {
+        const raw = await requestApi<any[]>(
+          `/api/courses/${courseId}/assignments`,
+          'GET',
+          undefined,
+          []
+        );
+        if (Array.isArray(raw)) {
+          return raw.map((a: any) => ({
+            id: Number(a.id),
+            course_id: Number(courseId),
+            course_name: a.course_name || 'Course',
+            course: a.course_name || String(courseId),
+            title: a.title || 'Assignment',
+            description: a.description ?? null,
+            instructions: a.instructions ?? null,
+            due_date: a.due_date ?? null,
+            dueDate: a.due_date ? String(a.due_date).slice(0, 10) : 'TBD',
+            score: a.submission_score != null ? `${a.submission_score}/${a.max_score || 100}` : (a.max_score ? `Max ${a.max_score}` : 'Pending'),
+            submission_score: a.submission_score ?? null,
+            max_score: Number(a.max_score) || 100,
+            status: (a.submission_status === 'graded' ? 'graded' : a.submission_status === 'submitted' ? 'submitted' : 'pending') as any,
+            submission_status: a.submission_status || 'not_submitted',
+          }));
+        }
+      } catch (e) {
+        console.warn('[Courses API Assignments Warning]', e);
+      }
+      return [];
     },
 
     // GET {{baseUrl}}/api/courses/{{courseId}}/quizzes
     getQuizzes: async (courseId: number): Promise<Quiz[]> => {
-      return requestApi<Quiz[]>(
-        `/api/courses/${courseId}/quizzes`,
-        'GET',
-        undefined,
-        QUIZZES_DATA.filter((q) => q.course.toLowerCase().includes(String(courseId)))
-      );
+      try {
+        const raw = await requestApi<any[]>(
+          `/api/courses/${courseId}/quizzes`,
+          'GET',
+          undefined,
+          []
+        );
+        if (Array.isArray(raw)) {
+          return raw.map((q: any) => ({
+            id: Number(q.id),
+            title: q.title || 'Quiz',
+            course: q.course_name || String(courseId),
+            date: q.start_time ? String(q.start_time).slice(0, 10) : 'Scheduled',
+            time: q.time_limit_mins ? `${q.time_limit_mins} mins` : (q.time_limit_minutes ? `${q.time_limit_minutes} mins` : '15 mins'),
+            questions: Number(q.question_count) || 10,
+            questionsCount: Number(q.question_count) || 10,
+            duration: q.time_limit_mins ? `${q.time_limit_mins} mins` : '15 mins',
+            status: (q.attempt_status === 'completed' ? 'completed' : 'not started') as any,
+            attempt_status: q.attempt_status ?? null,
+            attempt_score: q.attempt_score ?? null,
+            score: q.attempt_score != null ? String(q.attempt_score) : '-',
+          }));
+        }
+      } catch (e) {
+        console.warn('[Courses API Quizzes Warning]', e);
+      }
+      return [];
     },
 
     // GET {{baseUrl}}/api/courses/{{courseId}}/forums
-    getForums: async (courseId: number) => {
-      return requestApi<any[]>(
-        `/api/courses/${courseId}/forums`,
-        'GET',
-        undefined,
-        [
-          {
-            id: 1,
-            courseId,
-            title: 'Class Discussion Board',
-            postsCount: 4,
-            updatedAt: '2026-09-21',
-          },
-        ]
-      );
+    getForums: async (courseId: number): Promise<CourseForum[]> => {
+      try {
+        const raw = await requestApi<any[]>(
+          `/api/courses/${courseId}/forums`,
+          'GET',
+          undefined,
+          []
+        );
+        if (Array.isArray(raw)) {
+          return raw.map((f: any) => ({
+            id: Number(f.id),
+            courseId: Number(courseId),
+            title: f.title || 'Forum',
+            is_pinned: Boolean(f.is_pinned),
+            forum_type: f.forum_type || 'general',
+            post_count: Number(f.post_count ?? f.postsCount ?? 0),
+            postsCount: Number(f.post_count ?? f.postsCount ?? 0),
+            updatedAt: f.updated_at || f.updatedAt || undefined,
+          }));
+        }
+      } catch (e) {
+        console.warn('[Courses API Forums Warning]', e);
+      }
+      return [];
     },
 
     // GET {{baseUrl}}/api/calendar?start={{calendarStart}}&end={{calendarEnd}}
