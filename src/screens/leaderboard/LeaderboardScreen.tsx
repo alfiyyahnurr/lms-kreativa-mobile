@@ -85,6 +85,8 @@ export const LeaderboardScreen: React.FC = () => {
   const [myHouseName, setMyHouseName] = useState<string | null>(null);
   const [selectedHouseId, setSelectedHouseId] = useState<number | null>(null);
   const [contributors, setContributors] = useState<HouseTopContributor[]>([]);
+  const contributorsRef = useRef<HouseTopContributor[]>([]);
+  contributorsRef.current = contributors;
   const [loadingContrib, setLoadingContrib] = useState<boolean>(false);
   const [jenjangRows, setJenjangRows] = useState<StudentRankRow[]>([]);
   const [schoolLevel, setSchoolLevel] = useState<string>('high_school_igcse');
@@ -259,7 +261,7 @@ export const LeaderboardScreen: React.FC = () => {
             myHouseId: housesRes?.myHouseId ?? null,
             myHouseName: housesRes?.myHouseName ?? null,
             selectedHouseId: selectedHouseIdRef.current,
-            contributors: (housesRes?.contributors && Array.isArray(housesRes.contributors)) ? housesRes.contributors : contributors,
+            contributors: (housesRes?.contributors && Array.isArray(housesRes.contributors)) ? housesRes.contributors : contributorsRef.current,
             jenjangRows: jenjangRes?.rows || [],
             schoolLevel: jenjangRes?.schoolLevel || 'high_school_igcse',
             classRows: classRes?.rows || [],

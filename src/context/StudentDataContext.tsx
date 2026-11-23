@@ -144,8 +144,13 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Live Dashboard Data State
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+  const isDashboardFetchingRef = useRef(false);
+  const dashboardDataRef = useRef<DashboardData | null>(null);
+  dashboardDataRef.current = dashboardData;
 
   const fetchDashboardData = useCallback(async (): Promise<DashboardData | null> => {
+    if (isDashboardFetchingRef.current) return dashboardDataRef.current;
+    isDashboardFetchingRef.current = true;
     setIsDashboardLoading(true);
     try {
       const data = await api.dashboard.getDashboard();
@@ -178,6 +183,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     } catch (err: any) {
       console.warn('[Dashboard Fetch Warning]', err?.message || err);
     } finally {
+      isDashboardFetchingRef.current = false;
       setIsDashboardLoading(false);
     }
     return null;
@@ -323,9 +329,15 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // Dynamic Literacy Entries State (populated live from API)
   const [literacyEntries, setLiteracyEntries] = useState<LiteracyEntry[]>([]);
+  const isLiteracyLogsFetchingRef = useRef(false);
+  const literacyEntriesRef = useRef<LiteracyEntry[]>([]);
+  literacyEntriesRef.current = literacyEntries;
+  const isLiteracyStatsFetchingRef = useRef(false);
 
   // Fetch live student literacy logs directly from backend API
   const fetchLiteracyLogs = useCallback(async () => {
+    if (isLiteracyLogsFetchingRef.current) return literacyEntriesRef.current;
+    isLiteracyLogsFetchingRef.current = true;
     try {
       const logs = await api.literacy.list();
       setLiteracyEntries(logs);
@@ -348,12 +360,16 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return logs;
     } catch (err) {
       console.warn('[Fetch Literacy Logs Error]', err);
+    } finally {
+      isLiteracyLogsFetchingRef.current = false;
     }
     return [];
   }, []);
 
   // Fetch live student literacy statistics directly from backend API
   const fetchLiteracyStats = useCallback(async () => {
+    if (isLiteracyStatsFetchingRef.current) return null;
+    isLiteracyStatsFetchingRef.current = true;
     try {
       const stats = await api.literacy.getStats();
 
@@ -375,6 +391,8 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return stats;
     } catch (err) {
       console.warn('[Fetch Literacy Stats Error]', err);
+    } finally {
+      isLiteracyStatsFetchingRef.current = false;
     }
     return null;
   }, []);

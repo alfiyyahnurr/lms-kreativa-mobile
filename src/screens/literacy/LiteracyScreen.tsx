@@ -206,7 +206,9 @@ export const LiteracyScreen: React.FC = () => {
     resetForm();
   }, [isEditing, selectedEntry, resetForm]);
 
-  const isRefreshingRef = useRef<boolean>(false);
+  const isFetchingRef = useRef<boolean>(false);
+  const entriesCountRef = useRef<number>(0);
+  entriesCountRef.current = entries.length;
 
   // Instant SWR Cache-First Hydration (< 0.05s)
   useEffect(() => {
@@ -235,83 +237,63 @@ export const LiteracyScreen: React.FC = () => {
     };
   }, []);
 
-  // Load literacy logs and statistics whenever screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      let isMounted = true;
-      if (entries.length === 0) {
-        setIsFetching(true);
-      }
-      Promise.all([fetchLiteracyLogs(), fetchLiteracyStats()])
-        .then(([logs, stats]) => {
-          if (isMounted) {
-            if (Array.isArray(logs)) setEntries(logs);
-            if (stats) setLiveStats(stats);
+  // Stable, guarded data loader for literacy logs and stats (Anti-Loop Mutex Guard)
+  const loadLiteracyData = useCallback(async (isRefresh = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
 
-            // Persist latest data snapshot to local cache
-            void (async () => {
-              try {
-                const session = await storage.getStudentSession();
-                const studentId = session?.studentId ?? session?.userId ?? 'default';
-                await storage.setCache(`kreativa_cache_literacy_${studentId}`, {
-                  entries: Array.isArray(logs) ? logs : entries,
-                  stats: stats || liveStats,
-                });
-              } catch {
-                // ignore
-              }
-            })();
-          }
-        })
-        .finally(() => {
-          if (isMounted) setIsFetching(false);
-        });
+    if (isRefresh) {
+      setRefreshing(true);
+    } else if (entriesCountRef.current === 0) {
+      setIsFetching(true);
+    }
 
-      mainScrollRef.current?.scrollTo({ y: 0, animated: false });
-      return () => {
-        isMounted = false;
-        setIsAdding(false);
-        setSelectedEntry(null);
-        setIsEditing(false);
-        resetForm();
-        mainScrollRef.current?.scrollTo({ y: 0, animated: false });
-      };
-    }, [fetchLiteracyLogs, fetchLiteracyStats, resetForm, entries.length, liveStats, entries])
-  );
-
-  // Pure Pull-to-Refresh handler for Literacy logs & stats (Guarded)
-  const onRefresh = useCallback(async () => {
-    if (isRefreshingRef.current) return;
-    isRefreshingRef.current = true;
-    setRefreshing(true);
     try {
       const [logs, stats] = await Promise.all([
         fetchLiteracyLogs(),
         fetchLiteracyStats(),
       ]);
-      if (Array.isArray(logs)) setEntries(logs);
-      if (stats) setLiveStats(stats);
 
-      // Persist snapshot to local cache
+      if (Array.isArray(logs)) {
+        setEntries(logs);
+      }
+      if (stats) {
+        setLiveStats(stats);
+      }
+
+      // Persist latest data snapshot to local cache in background
       void (async () => {
         try {
           const session = await storage.getStudentSession();
           const studentId = session?.studentId ?? session?.userId ?? 'default';
           await storage.setCache(`kreativa_cache_literacy_${studentId}`, {
-            entries: Array.isArray(logs) ? logs : entries,
-            stats: stats || liveStats,
+            entries: Array.isArray(logs) ? logs : [],
+            stats: stats || null,
           });
         } catch {
-          // ignore
+          // ignore cache write error
         }
       })();
-    } catch (err) {
-      console.warn('[Literacy onRefresh Error]', err);
+    } catch (err: any) {
+      console.warn('[Literacy Load Error]', err?.message || err);
     } finally {
-      isRefreshingRef.current = false;
+      isFetchingRef.current = false;
+      setIsFetching(false);
       setRefreshing(false);
     }
-  }, [fetchLiteracyLogs, fetchLiteracyStats, entries, liveStats]);
+  }, [fetchLiteracyLogs, fetchLiteracyStats]);
+
+  // Sync on screen focus with 100% stable dependency (NO dynamic state!)
+  useFocusEffect(
+    useCallback(() => {
+      loadLiteracyData();
+    }, [loadLiteracyData])
+  );
+
+  // Pure Pull-to-Refresh handler
+  const onRefresh = useCallback(async () => {
+    await loadLiteracyData(true);
+  }, [loadLiteracyData]);
 
   // Reset when user taps tab icon or navigation triggers reset
   useEffect(() => {
