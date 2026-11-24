@@ -63,10 +63,13 @@ export const CalendarScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const isFetchingRef = useRef<boolean>(false);
 
-  // Scroll to top on focus
+  // Scroll to top on focus / blur
   useFocusEffect(
     useCallback(() => {
       scrollRef.current?.scrollTo({ y: 0, animated: false });
+      return () => {
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+      };
     }, [])
   );
 

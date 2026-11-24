@@ -44,18 +44,24 @@ export const AnnouncementsScreen: React.FC = () => {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
-  // Scroll to top on focus
+  // Scroll to top and reset view on focus/blur
   useFocusEffect(
     useCallback(() => {
+      if (!route.params?.isDetail) {
+        setSelectedAnnouncement(null);
+      }
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       return () => {
+        setSelectedAnnouncement(null);
         scrollRef.current?.scrollTo({ y: 0, animated: false });
       };
-    }, [])
+    }, [route.params?.isDetail])
   );
 
   useEffect(() => {
     const unsubscribe = navigation?.addListener?.('tabPress', () => {
+      setSelectedAnnouncement(null);
+      setFilter('all');
       scrollRef.current?.scrollTo({ y: 0, animated: false });
     });
     return unsubscribe;
@@ -63,6 +69,8 @@ export const AnnouncementsScreen: React.FC = () => {
 
   useEffect(() => {
     if (route.params?.resetKey) {
+      setSelectedAnnouncement(null);
+      setFilter('all');
       scrollRef.current?.scrollTo({ y: 0, animated: false });
     }
   }, [route.params?.resetKey]);

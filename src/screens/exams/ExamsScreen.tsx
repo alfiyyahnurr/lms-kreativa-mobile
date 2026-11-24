@@ -20,12 +20,15 @@ export const ExamsScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
+      if (!route.params?.isDetail) {
+        setActiveExam(null);
+      }
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       return () => {
         setActiveExam(null);
         scrollRef.current?.scrollTo({ y: 0, animated: false });
       };
-    }, [])
+    }, [route.params?.isDetail])
   );
 
   useEffect(() => {

@@ -283,11 +283,26 @@ export const LiteracyScreen: React.FC = () => {
     }
   }, [fetchLiteracyLogs, fetchLiteracyStats]);
 
-  // Sync on screen focus with 100% stable dependency (NO dynamic state!)
+  // Sync on screen focus with 100% stable dependency and reset form/detail on blur
   useFocusEffect(
     useCallback(() => {
+      if (!route.params?.isDetail) {
+        setIsAdding(false);
+        setSelectedEntry(null);
+        setIsEditing(false);
+        setActiveTab('log');
+      }
       loadLiteracyData();
-    }, [loadLiteracyData])
+
+      return () => {
+        setIsAdding(false);
+        setSelectedEntry(null);
+        setIsEditing(false);
+        setActiveTab('log');
+        resetForm();
+        mainScrollRef.current?.scrollTo({ y: 0, animated: false });
+      };
+    }, [loadLiteracyData, resetForm, route.params?.isDetail])
   );
 
   // Pure Pull-to-Refresh handler

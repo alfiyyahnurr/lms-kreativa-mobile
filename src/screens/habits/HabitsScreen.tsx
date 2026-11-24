@@ -90,29 +90,6 @@ export const HabitsScreen: React.FC = () => {
   const route = useRoute<any>();
   const scrollRef = useRef<any>(null);
 
-  // Scroll to top when tab or focus changes
-  useFocusEffect(
-    useCallback(() => {
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
-      return () => {
-        scrollRef.current?.scrollTo({ y: 0, animated: false });
-      };
-    }, [])
-  );
-
-  useEffect(() => {
-    const unsubscribe = navigation?.addListener?.('tabPress', () => {
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
-    });
-    return unsubscribe;
-  }, [navigation]);
-
-  useEffect(() => {
-    if (route.params?.resetKey) {
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
-    }
-  }, [route.params?.resetKey]);
-
   const { toastList, dismissToast, showToast } = useStudentData();
 
   // 100% Web LMS Model States
@@ -256,6 +233,87 @@ export const HabitsScreen: React.FC = () => {
     },
     [today, showToast]
   );
+
+  const getLocalCurrentYm = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const getLocalToday = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  // Reset view to today's date, current month, and 'daily' tab on focus and blur
+  useFocusEffect(
+    useCallback(() => {
+      const curYm = getLocalCurrentYm();
+      const curToday = today || getLocalToday();
+
+      setTab('daily');
+      setYearMonth(curYm);
+      if (days && days.length > 0) {
+        setSelectedDate(pickDefaultDate(days, curToday));
+      } else {
+        setSelectedDate(curToday);
+      }
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+
+      if (yearMonth !== curYm) {
+        void loadMonth(curYm, curToday);
+      }
+
+      return () => {
+        setTab('daily');
+        const curYmBlur = getLocalCurrentYm();
+        const curTodayBlur = today || getLocalToday();
+        setYearMonth(curYmBlur);
+        if (days && days.length > 0) {
+          setSelectedDate(pickDefaultDate(days, curTodayBlur));
+        } else {
+          setSelectedDate(curTodayBlur);
+        }
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+      };
+    }, [today, days, yearMonth, loadMonth])
+  );
+
+  useEffect(() => {
+    const unsubscribe = navigation?.addListener?.('tabPress', () => {
+      const curYm = getLocalCurrentYm();
+      const curToday = today || getLocalToday();
+      setTab('daily');
+      setYearMonth(curYm);
+      if (days && days.length > 0) {
+        setSelectedDate(pickDefaultDate(days, curToday));
+      } else {
+        setSelectedDate(curToday);
+      }
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      if (yearMonth !== curYm) {
+        void loadMonth(curYm, curToday);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, today, days, yearMonth, loadMonth]);
+
+  useEffect(() => {
+    if (route.params?.resetKey) {
+      const curYm = getLocalCurrentYm();
+      const curToday = today || getLocalToday();
+      setTab('daily');
+      setYearMonth(curYm);
+      if (days && days.length > 0) {
+        setSelectedDate(pickDefaultDate(days, curToday));
+      } else {
+        setSelectedDate(curToday);
+      }
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      if (yearMonth !== curYm) {
+        void loadMonth(curYm, curToday);
+      }
+    }
+  }, [route.params?.resetKey, today, days, yearMonth, loadMonth]);
 
   // Initial mount load & Instant SWR Cache-First Hydration (< 0.05s)
   useEffect(() => {
@@ -1137,16 +1195,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth: 1.5,
     borderColor: 'transparent',
+    borderStyle: 'solid',
   },
   dayCellSelected: {
     borderWidth: 1.5,
     borderColor: SEC_HS.blue,
+    borderStyle: 'solid',
     backgroundColor: SEC_HS.blueLight,
   },
   dayCellSubmission: {
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderStyle: 'solid',
     backgroundColor: SEC_HS.greenLight,
   },
   dayCellFuture: {
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderStyle: 'solid',
     backgroundColor: 'transparent',
   },
   dayCellPast: {

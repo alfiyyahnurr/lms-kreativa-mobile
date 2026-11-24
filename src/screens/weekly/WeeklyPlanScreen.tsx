@@ -85,13 +85,17 @@ export const WeeklyPlanScreen: React.FC = () => {
   // Reset scroll and states on navigation focus
   useFocusEffect(
     useCallback(() => {
+      if (!route.params?.isDetail) {
+        setSelectedSessionDetail(null);
+        setToastMessage(null);
+      }
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       return () => {
         setSelectedSessionDetail(null);
         setToastMessage(null);
         scrollRef.current?.scrollTo({ y: 0, animated: false });
       };
-    }, [])
+    }, [route.params?.isDetail])
   );
 
   useEffect(() => {

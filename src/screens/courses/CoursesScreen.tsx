@@ -145,21 +145,30 @@ export const CoursesScreen: React.FC = () => {
   const scrollRef = useRef<any>(null);
   const isFetchingRef = useRef(false);
 
-  // Focus effect: fetch fresh courses on focus safely with mutex
+  // Focus effect: fetch fresh courses on focus and reset detail view on blur
   useFocusEffect(
     useCallback(() => {
-      if (isFetchingRef.current) return;
-      isFetchingRef.current = true;
-      fetchCourses()
-        .catch(() => {})
-        .finally(() => {
-          isFetchingRef.current = false;
-        });
+      // If not navigating specifically to detail view, ensure root list is shown
+      if (!route.params?.isDetail) {
+        setSelectedCourse(null);
+      }
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+
+      if (!isFetchingRef.current) {
+        isFetchingRef.current = true;
+        fetchCourses()
+          .catch(() => {})
+          .finally(() => {
+            isFetchingRef.current = false;
+          });
+      }
 
       return () => {
         isFetchingRef.current = false;
+        setSelectedCourse(null);
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
       };
-    }, [fetchCourses])
+    }, [fetchCourses, route.params?.isDetail])
   );
 
   // Tab reset handler

@@ -114,11 +114,10 @@ export const LeaderboardScreen: React.FC = () => {
           if (Array.isArray(cached.houses) && cached.houses.length > 0) setHouses(cached.houses);
           if (cached.myHouseId != null) setMyHouseId(cached.myHouseId);
           if (cached.myHouseName) setMyHouseName(cached.myHouseName);
-          if (cached.selectedHouseId != null) {
-            selectedHouseIdRef.current = cached.selectedHouseId;
-            setSelectedHouseId(cached.selectedHouseId);
-          }
-          if (Array.isArray(cached.contributors)) setContributors(cached.contributors);
+          // Default unselected state: do not restore selectedHouseId/contributors from cache
+          setSelectedHouseId(null);
+          selectedHouseIdRef.current = null;
+          setContributors([]);
           if (Array.isArray(cached.jenjangRows)) setJenjangRows(cached.jenjangRows);
           if (cached.schoolLevel) setSchoolLevel(cached.schoolLevel);
           if (Array.isArray(cached.classRows)) setClassRows(cached.classRows);
@@ -138,18 +137,35 @@ export const LeaderboardScreen: React.FC = () => {
     };
   }, []);
 
-  // Scroll to top on navigation/focus
+  // Scroll to top on navigation/focus and reset to default unselected house tab on blur/focus
   useFocusEffect(
     useCallback(() => {
+      setSelectedHouseId(null);
+      selectedHouseIdRef.current = null;
+      setContributors([]);
+      if (!route.params?.initialTab) {
+        setActiveTab('house');
+      }
       scrollRef.current?.scrollTo({ y: 0, animated: false });
+
       return () => {
+        setSelectedHouseId(null);
+        selectedHouseIdRef.current = null;
+        setContributors([]);
+        if (!route.params?.initialTab) {
+          setActiveTab('house');
+        }
         scrollRef.current?.scrollTo({ y: 0, animated: false });
       };
-    }, [])
+    }, [route.params?.initialTab])
   );
 
   useEffect(() => {
     const unsubscribe = navigation?.addListener?.('tabPress', () => {
+      setSelectedHouseId(null);
+      selectedHouseIdRef.current = null;
+      setContributors([]);
+      setActiveTab('house');
       scrollRef.current?.scrollTo({ y: 0, animated: false });
     });
     return unsubscribe;
@@ -157,6 +173,10 @@ export const LeaderboardScreen: React.FC = () => {
 
   useEffect(() => {
     if (route.params?.resetKey) {
+      setSelectedHouseId(null);
+      selectedHouseIdRef.current = null;
+      setContributors([]);
+      setActiveTab('house');
       scrollRef.current?.scrollTo({ y: 0, animated: false });
     }
   }, [route.params?.resetKey]);
@@ -213,10 +233,9 @@ export const LeaderboardScreen: React.FC = () => {
         if (housesRes.myHouseId != null) setMyHouseId(housesRes.myHouseId);
         if (housesRes.myHouseName) setMyHouseName(housesRes.myHouseName);
 
-        const activeHouse =
-          selectedHouseIdRef.current ?? housesRes.myHouseId ?? housesRes.rows[0]?.house_id;
+        // Only load contributors if a house was explicitly selected by user
+        const activeHouse = selectedHouseIdRef.current;
         if (activeHouse) {
-          selectedHouseIdRef.current = activeHouse;
           setSelectedHouseId(activeHouse);
           if (housesRes.contributors && Array.isArray(housesRes.contributors)) {
             setContributors(housesRes.contributors);
@@ -231,6 +250,10 @@ export const LeaderboardScreen: React.FC = () => {
               console.warn('[Contributors Sync Error]', cErr?.message || cErr);
             }
           }
+        } else {
+          // Default clean state: no house card selected
+          setSelectedHouseId(null);
+          setContributors([]);
         }
       }
 

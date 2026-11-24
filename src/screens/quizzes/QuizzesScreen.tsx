@@ -29,12 +29,15 @@ export const QuizzesScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
+      if (!route.params?.isDetail) {
+        setActiveQuiz(null);
+      }
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       return () => {
         setActiveQuiz(null);
         scrollRef.current?.scrollTo({ y: 0, animated: false });
       };
-    }, [])
+    }, [route.params?.isDetail])
   );
 
   useEffect(() => {

@@ -44,11 +44,21 @@ export const ClubsScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const isFetchingRef = useRef<boolean>(false);
 
-  // Scroll to top on focus
+  // Reset view to root list and scroll to top on focus / blur
   useFocusEffect(
     useCallback(() => {
+      if (!route.params?.isDetail) {
+        setSelectedClubId(null);
+        setOpenToReports(false);
+      }
       scrollRef.current?.scrollTo({ y: 0, animated: false });
-    }, [])
+
+      return () => {
+        setSelectedClubId(null);
+        setOpenToReports(false);
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+      };
+    }, [route.params?.isDetail])
   );
 
   useEffect(() => {

@@ -127,15 +127,19 @@ export const AssignmentsScreen: React.FC = () => {
     }, [fetchAssignments])
   );
 
-  // Auto-close assignment detail and scroll to top when navigating away
+  // Auto-close assignment detail and reset on blur/focus
   useFocusEffect(
     useCallback(() => {
+      if (!route.params?.isDetail) {
+        setSelectedAssignment(null);
+        setToastMessage(null);
+      }
       return () => {
         setSelectedAssignment(null);
         setToastMessage(null);
         scrollRef.current?.scrollTo({ y: 0, animated: false });
       };
-    }, [])
+    }, [route.params?.isDetail])
   );
 
   useEffect(() => {
