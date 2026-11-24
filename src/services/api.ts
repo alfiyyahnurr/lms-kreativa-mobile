@@ -36,6 +36,10 @@ import {
   CourseContentResponse,
   CourseScoreDetail,
   CourseForum,
+  ClubItem,
+  ClubReportItem,
+  ClubDetailData,
+  CalendarEventItem,
 } from '../types';
 
 import {
@@ -1912,6 +1916,62 @@ export const api = {
           mimeType: 'application/pdf',
         };
       }
+    },
+  },
+
+  // ==========================================
+  // 21. CLUBS
+  // ==========================================
+  clubs: {
+    // GET {{baseUrl}}/api/clubs
+    list: async (): Promise<{ clubs: ClubItem[]; recentReports: ClubReportItem[] }> => {
+      const res = await requestApi<any>('/api/clubs', 'GET', undefined, { clubs: [], recentReports: [] });
+      if (Array.isArray(res)) {
+        return { clubs: res, recentReports: [] };
+      }
+      return {
+        clubs: Array.isArray(res?.clubs) ? res.clubs : [],
+        recentReports: Array.isArray(res?.recentReports) ? res.recentReports : [],
+      };
+    },
+
+    // GET {{baseUrl}}/api/clubs/:id
+    getDetail: async (id: number | string): Promise<ClubDetailData> => {
+      const res = await requestApi<any>(`/api/clubs/${id}`, 'GET', undefined, {
+        club: { id: Number(id), name: '' },
+        sessions: [],
+        materials: [],
+        scores: [],
+        reports: [],
+      });
+      return {
+        club: res?.club || { id: Number(id), name: '' },
+        sessions: Array.isArray(res?.sessions) ? res.sessions : [],
+        materials: Array.isArray(res?.materials) ? res.materials : [],
+        scores: Array.isArray(res?.scores) ? res.scores : [],
+        reports: Array.isArray(res?.reports) ? res.reports : [],
+      };
+    },
+  },
+
+  // ==========================================
+  // 22. CALENDAR
+  // ==========================================
+  calendar: {
+    // GET {{baseUrl}}/api/calendar
+    getEvents: async (): Promise<CalendarEventItem[]> => {
+      const raw = await requestApi<any[]>('/api/calendar', 'GET', undefined, []);
+      if (!Array.isArray(raw)) return [];
+      return raw.map((item) => ({
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        start_datetime: item.start_datetime,
+        end_datetime: item.end_datetime,
+        location: item.location,
+        event_type: item.event_type,
+        audience_type: item.audience_type,
+      }));
     },
   },
 };

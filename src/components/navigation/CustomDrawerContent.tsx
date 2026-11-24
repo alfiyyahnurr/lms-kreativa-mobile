@@ -69,9 +69,11 @@ export const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
     { label: 'Literacy', tabName: 'LiteracyTab', Icon: BookMarked },
     { label: 'Habits', tabName: 'HabitsTab', Icon: CheckCircle },
     { label: 'Leaderboard', tabName: 'BoardTab', Icon: Trophy },
+    { label: 'My Clubs', tabName: 'ClubsTab', Icon: Trophy },
   ];
 
   const moreItems: { label: string; tabName: string; Icon: LucideIcon }[] = [
+    { label: 'Calendar', tabName: 'CalendarTab', Icon: CalendarDays },
     { label: 'Announcements', tabName: 'AnnouncementsTab', Icon: Megaphone },
     { label: 'Profile', tabName: 'ProfileTab', Icon: User },
   ];

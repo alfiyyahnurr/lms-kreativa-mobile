@@ -5,6 +5,7 @@ import { COLORS, RADIUS, FONTS } from '../../constants/theme';
 
 export interface EmptyStateProps {
   icon?: keyof typeof Ionicons.glyphMap;
+  customIcon?: React.ReactNode;
   title?: string;
   message?: string;
   description?: string;
@@ -21,6 +22,7 @@ export interface EmptyStateProps {
  */
 export const EmptyState: React.FC<EmptyStateProps> = ({
   icon,
+  customIcon,
   title,
   message,
   description,
@@ -35,10 +37,12 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
   return (
     <View style={[styles.container, boxed && styles.boxedContainer, style]}>
-      {icon ? (
-        <Ionicons name={icon} size={38} color="#94A3B8" style={styles.icon} />
+      {customIcon ? (
+        <View style={[styles.icon, boxed && styles.boxedIcon]}>{customIcon}</View>
+      ) : icon ? (
+        <Ionicons name={icon} size={32} color="#94A3B8" style={[styles.icon, boxed && styles.boxedIcon]} />
       ) : null}
-      <Text style={styles.title}>{displayTitle}</Text>
+      <Text style={[styles.title, boxed && styles.boxedTitle]}>{displayTitle}</Text>
       {displayDesc ? <Text style={styles.description}>{displayDesc}</Text> : null}
 
       {actionLabel && onAction ? (
@@ -59,20 +63,37 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   boxedContainer: {
-    backgroundColor: '#FAFAF8',
-    borderRadius: RADIUS.lg,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E0D8',
-    marginVertical: 12,
+    borderColor: '#E2E8F0',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    marginVertical: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   icon: {
     marginBottom: 16,
+  },
+  boxedIcon: {
+    marginBottom: 8,
   },
   title: {
     fontSize: 17,
     fontFamily: FONTS.medium,
     fontWeight: '500',
     color: '#0F172A',
+    textAlign: 'center',
+  },
+  boxedTitle: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    fontWeight: '400',
+    color: '#475569',
     textAlign: 'center',
   },
   description: {

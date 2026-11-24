@@ -672,3 +672,83 @@ export interface DashboardData {
     academicYearName?: string | null;
   };
 }
+
+// ==========================================
+// CLUBS TYPES
+// ==========================================
+export interface ClubItem {
+  id: number;
+  name: string;
+  description?: string | null;
+  schedule_text?: string | null;
+  coach_name?: string | null;
+  meeting_weekday?: number | null;
+  meeting_start?: string | null;
+  meeting_end?: string | null;
+  meeting_location?: string | null;
+  status?: string;
+  joined_at?: string;
+  report_count?: number;
+}
+
+export interface ClubReportItem {
+  id: number;
+  club_id: number;
+  club_name?: string;
+  title: string;
+  summary?: string | null;
+  photo_url?: string | null;
+  photo_urls?: string[];
+  created_at?: string;
+  session_title?: string | null;
+  session_date?: string | null;
+}
+
+export interface ClubSessionItem {
+  id: number;
+  title: string;
+  session_date: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  location?: string | null;
+}
+
+export interface ClubMaterialItem {
+  id: number;
+  title: string;
+  description?: string | null;
+  file_url?: string | null;
+  external_url?: string | null;
+}
+
+export interface ClubScoreItem {
+  id: number;
+  title: string;
+  score: number;
+  max_score: number;
+  notes?: string | null;
+  scored_at?: string | null;
+}
+
+export interface ClubDetailData {
+  club: ClubItem;
+  sessions: ClubSessionItem[];
+  materials: ClubMaterialItem[];
+  scores: ClubScoreItem[];
+  reports: ClubReportItem[];
+}
+
+// ==========================================
+// CALENDAR TYPES
+// ==========================================
+export interface CalendarEventItem {
+  id: number | string;
+  title: string;
+  description?: string | null;
+  start_datetime: string;
+  end_datetime?: string | null;
+  location?: string | null;
+  event_type?: string | null;
+  audience_type?: string | null;
+}
+

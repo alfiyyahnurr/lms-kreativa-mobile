@@ -13,6 +13,8 @@ import ExamsScreen from '../screens/exams/ExamsScreen';
 import ReportCardScreen from '../screens/report/ReportCardScreen';
 import LiteracyScreen from '../screens/literacy/LiteracyScreen';
 import AnnouncementsScreen from '../screens/announcements/AnnouncementsScreen';
+import ClubsScreen from '../screens/clubs/ClubsScreen';
+import CalendarScreen from '../screens/calendar/CalendarScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -40,6 +42,8 @@ export const TabNavigator: React.FC = () => {
       <Tab.Screen name="ReportCardTab" component={ReportCardScreen} />
       <Tab.Screen name="LiteracyTab" component={LiteracyScreen} />
       <Tab.Screen name="AnnouncementsTab" component={AnnouncementsScreen} />
+      <Tab.Screen name="ClubsTab" component={ClubsScreen} />
+      <Tab.Screen name="CalendarTab" component={CalendarScreen} />
       <Tab.Screen name="ProfileTab" component={ProfileScreen} />
     </Tab.Navigator>
   );

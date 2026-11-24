@@ -19,5 +19,7 @@ export type BottomTabParamList = {
   ReportCardTab: undefined;
   LiteracyTab: undefined;
   AnnouncementsTab: undefined;
+  ClubsTab: undefined;
+  CalendarTab: undefined;
   ProfileTab: undefined;
 };
