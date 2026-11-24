@@ -48,8 +48,6 @@ import {
   QUIZZES_DATA,
   EXAMS_DATA,
   GRADES_DATA,
-  WEEKLY_SCHEDULE,
-  getWeeklyPlanForWeek,
   MOCK_PUBLISHED_CARDS_SUMMARY,
   MOCK_PUBLISHED_CARDS_DETAIL,
 } from '../data/mockData';
@@ -983,7 +981,7 @@ export const api = {
   schedule: {
     // GET {{baseUrl}}/api/schedule
     getSchedule: async (): Promise<ScheduleItem[]> => {
-      return requestApi<ScheduleItem[]>('/api/schedule', 'GET', undefined, [...WEEKLY_SCHEDULE.Mon]);
+      return requestApi<ScheduleItem[]>('/api/schedule', 'GET', undefined, []);
     },
   },
 
@@ -1450,25 +1448,91 @@ export const api = {
   },
 
   // ==========================================
-  // 15. WEEKLY PLAN & SESSIONS
+  // 15. WEEKLY PLAN & SESSIONS (100% Real API)
   // ==========================================
   weeklyPlan: {
     // GET {{baseUrl}}/api/student/weekly-plan?weekStart={{weekStart}}
-    getWeek: async (weekStartIso: string = '2026-09-07'): Promise<WeeklyPlanSession[]> => {
-      return getWeeklyPlanForWeek(weekStartIso);
+    getWeek: async (weekStartIso?: string): Promise<WeeklyPlanSession[]> => {
+      const url = weekStartIso
+        ? `/api/student/weekly-plan?weekStart=${encodeURIComponent(weekStartIso)}`
+        : '/api/student/weekly-plan';
+      const res = await requestApi<{ weekStart?: string; sessions?: any[] } | any[]>(
+        url,
+        'GET',
+        undefined,
+        []
+      );
+
+      const rawSessions: any[] = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.sessions)
+        ? res.sessions
+        : [];
+
+      return rawSessions.map((s: any) => {
+        const id = Number(s.id ?? s.sessionId ?? 0);
+        const courseId = Number(s.course_id ?? s.courseId ?? 0);
+        const courseName = String(s.course_name ?? s.courseName ?? s.subject_name ?? 'Course');
+        const subjectName = String(s.subject_name ?? s.courseName ?? 'General');
+        const sessionDate = String(s.session_date ?? s.date ?? '').slice(0, 10);
+
+        let dayOfWeek = Number(s.dayOfWeek ?? 1);
+        if (sessionDate) {
+          const d = new Date(sessionDate);
+          if (!isNaN(d.getTime())) {
+            // Sunday = 7, Monday = 1, ..., Friday = 5
+            dayOfWeek = d.getDay() === 0 ? 7 : d.getDay();
+          }
+        }
+
+        const startTime = s.start_time ? String(s.start_time).slice(0, 5) : '';
+        const endTime = s.end_time ? String(s.end_time).slice(0, 5) : '';
+        const timeStr = startTime && endTime ? `${startTime} – ${endTime}` : (s.time || startTime || '08:00 – 09:30');
+
+        const preDone = Boolean(s.pre_done ?? s.preDone);
+        const postDone = Boolean(s.post_done ?? s.postDone);
+
+        return {
+          id,
+          sessionId: id,
+          course_id: courseId,
+          courseId,
+          course_name: courseName,
+          courseName,
+          subject_name: subjectName,
+          courseCode: s.courseCode || subjectName.slice(0, 4).toUpperCase(),
+          session_number: s.session_number ?? s.sessionNumber ?? 1,
+          sessionNumber: s.session_number ?? s.sessionNumber ?? 1,
+          title: String(s.title || ''),
+          session_date: sessionDate,
+          date: sessionDate,
+          start_time: s.start_time ?? null,
+          end_time: s.end_time ?? null,
+          time: timeStr,
+          dayOfWeek,
+          location: s.location ?? s.room ?? null,
+          room: s.location ?? s.room ?? 'Classroom',
+          teacher: s.teacher ?? '',
+          status: s.status ?? 'scheduled',
+          pre_learning_enabled: Boolean(s.pre_learning_enabled),
+          post_learning_enabled: Boolean(s.post_learning_enabled),
+          pre_learning_minutes: s.pre_learning_minutes ?? null,
+          post_learning_minutes: s.post_learning_minutes ?? null,
+          pre_done: preDone,
+          preDone,
+          post_done: postDone,
+          postDone,
+          preQuestion: s.preQuestion || '',
+          postNote: s.postNote || '',
+          materials: s.materials || [],
+        };
+      });
     },
 
     // GET {{baseUrl}}/api/student/sessions/{{sessionId}}
-    getStudentSession: async (sessionId: number): Promise<WeeklyPlanSession | undefined> => {
-      const allSessions = getWeeklyPlanForWeek('2026-09-21');
-      return allSessions.find((s) => s.sessionId === sessionId);
-    },
-
-    // GET {{baseUrl}}/api/sessions/{{sessionId}}
-    getSessionDetail: async (sessionId: number) => {
-      const allSessions = getWeeklyPlanForWeek('2026-09-21');
-      const session = allSessions.find((s) => s.sessionId === sessionId);
-      return session || allSessions[0];
+    getSessionDetail: async (sessionId: number): Promise<any> => {
+      const res = await requestApi<any>(`/api/student/sessions/${sessionId}`, 'GET');
+      return res?.session || res;
     },
 
     // POST {{baseUrl}}/api/student/sessions/{{sessionId}}/progress
@@ -1476,12 +1540,11 @@ export const api = {
       sessionId: number,
       payload: { preDone?: boolean; postDone?: boolean; preQuestion?: string; postNote?: string }
     ) => {
-      return {
-        success: true,
-        sessionId,
-        ...payload,
-        updatedAt: new Date().toISOString(),
-      };
+      return requestApi<any>(
+        `/api/student/sessions/${sessionId}/progress`,
+        'POST',
+        payload
+      );
     },
   },
 

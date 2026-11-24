@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SHADOWS } from '../../constants/theme';
 import { WeeklyPlanSession } from '../../types';
+import { api } from '../../services/api';
 
 interface WeeklyPlanDetailViewProps {
   session: WeeklyPlanSession;
@@ -60,30 +61,54 @@ export const WeeklyPlanDetailView: React.FC<WeeklyPlanDetailViewProps> = ({
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [session.sessionId]);
 
-  const handleTogglePreDone = () => {
+  const sessionId = session.sessionId || session.id || 0;
+
+  const handleTogglePreDone = async () => {
     const nextVal = !preDone;
     setPreDone(nextVal);
     session.preDone = nextVal;
+    session.pre_done = nextVal;
     if (onUpdateSession) onUpdateSession(session);
+    try {
+      await api.weeklyPlan.updateSessionProgress(sessionId, { preDone: nextVal });
+    } catch (err) {
+      console.warn('[WeeklyPlanDetail] Failed to update preDone:', err);
+    }
   };
 
-  const handleTogglePostDone = () => {
+  const handleTogglePostDone = async () => {
     const nextVal = !postDone;
     setPostDone(nextVal);
     session.postDone = nextVal;
+    session.post_done = nextVal;
     if (onUpdateSession) onUpdateSession(session);
+    try {
+      await api.weeklyPlan.updateSessionProgress(sessionId, { postDone: nextVal });
+    } catch (err) {
+      console.warn('[WeeklyPlanDetail] Failed to update postDone:', err);
+    }
   };
 
-  const handleSaveQuestion = (text: string) => {
+  const handleSaveQuestion = async (text: string) => {
     setPreQuestion(text);
     session.preQuestion = text;
     if (onUpdateSession) onUpdateSession(session);
+    try {
+      await api.weeklyPlan.updateSessionProgress(sessionId, { preQuestion: text });
+    } catch (err) {
+      console.warn('[WeeklyPlanDetail] Failed to update preQuestion:', err);
+    }
   };
 
-  const handleSaveReflection = (text: string) => {
+  const handleSaveReflection = async (text: string) => {
     setPostNote(text);
     session.postNote = text;
     if (onUpdateSession) onUpdateSession(session);
+    try {
+      await api.weeklyPlan.updateSessionProgress(sessionId, { postNote: text });
+    } catch (err) {
+      console.warn('[WeeklyPlanDetail] Failed to update postNote:', err);
+    }
   };
 
   const handleOpenResource = () => {

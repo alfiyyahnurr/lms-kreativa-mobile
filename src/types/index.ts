@@ -502,23 +502,40 @@ export interface CourseSessionDetail extends CourseSession {
 }
 
 export interface WeeklyPlanSession {
+  // Database fields from Web LMS
+  id?: number;
+  course_id?: number;
+  subject_name?: string;
+  course_name?: string;
+  session_date?: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  location?: string | null;
+  pre_learning_enabled?: boolean;
+  post_learning_enabled?: boolean;
+  pre_learning_minutes?: number | null;
+  post_learning_minutes?: number | null;
+  pre_done?: boolean;
+  post_done?: boolean;
+
+  // Normalized / legacy mobile alias fields
   sessionId: number;
   courseId: number;
   courseName: string;
-  courseCode: string;
-  sessionNumber: number;
+  courseCode?: string;
+  sessionNumber?: number;
   title: string;
   date: string; // YYYY-MM-DD
   dayOfWeek: number; // 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri
   time: string; // e.g. "08:00 - 09:30"
-  room: string;
-  teacher: string;
+  room?: string;
+  teacher?: string;
   preDone: boolean;
   postDone: boolean;
   preQuestion?: string;
   postNote?: string;
   materials?: string[];
-  status: 'completed' | 'in_progress' | 'scheduled';
+  status: 'completed' | 'in_progress' | 'scheduled' | string;
 }
 
 export interface ToastNotification {
