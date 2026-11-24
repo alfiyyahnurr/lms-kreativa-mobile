@@ -126,6 +126,25 @@ export const HabitsScreen: React.FC = () => {
   const [lbLoading, setLbLoading] = useState<boolean>(false);
   const lbFetchedRef = useRef<boolean>(false);
 
+  // Active state refs to decouple navigation focus from state updates (prevents loops)
+  const yearMonthRef = useRef<string>(yearMonth);
+  const todayRef = useRef<string>(today);
+  const daysRef = useRef<HabitDayRecord[]>(days);
+  const hasNavigatedAwayRef = useRef<boolean>(false);
+  const isFetchingMonthRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    yearMonthRef.current = yearMonth;
+  }, [yearMonth]);
+
+  useEffect(() => {
+    todayRef.current = today;
+  }, [today]);
+
+  useEffect(() => {
+    daysRef.current = days;
+  }, [days]);
+
   // Date and edit boundary checks
   const currentYm = today.slice(0, 7);
   const canGoNextMonth = shiftYearMonth(yearMonth, 1) <= currentYm;
@@ -159,6 +178,10 @@ export const HabitsScreen: React.FC = () => {
   // Load habit records for a month matching Web LMS loadMonth
   const loadMonth = useCallback(
     async (ym: string, preferDate?: string) => {
+      if (isFetchingMonthRef.current) return;
+      isFetchingMonthRef.current = true;
+      setLoadingMonth(true);
+
       // Check cache first for instant response when switching months
       try {
         const session = await storage.getStudentSession();
@@ -228,10 +251,11 @@ export const HabitsScreen: React.FC = () => {
         console.warn('[Habits Load Month Error]', err?.message || err);
         showToast(err?.message || 'Failed to load month', 'error');
       } finally {
+        isFetchingMonthRef.current = false;
         setLoadingMonth(false);
       }
     },
-    [today, showToast]
+    [showToast]
   );
 
   const getLocalCurrentYm = () => {
@@ -244,76 +268,73 @@ export const HabitsScreen: React.FC = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
-  // Reset view to today's date, current month, and 'daily' tab on focus and blur
+  // Reset view to today's date, current month, and 'daily' tab ONLY when returning from another screen
   useFocusEffect(
     useCallback(() => {
-      const curYm = getLocalCurrentYm();
-      const curToday = today || getLocalToday();
+      if (hasNavigatedAwayRef.current) {
+        hasNavigatedAwayRef.current = false;
+        const curYm = getLocalCurrentYm();
+        const curToday = todayRef.current || getLocalToday();
 
-      setTab('daily');
-      setYearMonth(curYm);
-      if (days && days.length > 0) {
-        setSelectedDate(pickDefaultDate(days, curToday));
-      } else {
-        setSelectedDate(curToday);
-      }
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
+        setTab('daily');
+        setYearMonth(curYm);
+        if (daysRef.current && daysRef.current.length > 0) {
+          setSelectedDate(pickDefaultDate(daysRef.current, curToday));
+        } else {
+          setSelectedDate(curToday);
+        }
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
 
-      if (yearMonth !== curYm) {
-        void loadMonth(curYm, curToday);
+        if (yearMonthRef.current !== curYm) {
+          void loadMonth(curYm, curToday);
+        }
       }
 
       return () => {
+        // Mark that user has left the Habits screen to another tab/drawer
+        hasNavigatedAwayRef.current = true;
         setTab('daily');
-        const curYmBlur = getLocalCurrentYm();
-        const curTodayBlur = today || getLocalToday();
-        setYearMonth(curYmBlur);
-        if (days && days.length > 0) {
-          setSelectedDate(pickDefaultDate(days, curTodayBlur));
-        } else {
-          setSelectedDate(curTodayBlur);
-        }
         scrollRef.current?.scrollTo({ y: 0, animated: false });
       };
-    }, [today, days, yearMonth, loadMonth])
+    }, [loadMonth])
   );
 
   useEffect(() => {
     const unsubscribe = navigation?.addListener?.('tabPress', () => {
       const curYm = getLocalCurrentYm();
-      const curToday = today || getLocalToday();
+      const curToday = todayRef.current || getLocalToday();
       setTab('daily');
       setYearMonth(curYm);
-      if (days && days.length > 0) {
-        setSelectedDate(pickDefaultDate(days, curToday));
+      if (daysRef.current && daysRef.current.length > 0) {
+        setSelectedDate(pickDefaultDate(daysRef.current, curToday));
       } else {
         setSelectedDate(curToday);
       }
       scrollRef.current?.scrollTo({ y: 0, animated: false });
-      if (yearMonth !== curYm) {
+      if (yearMonthRef.current !== curYm) {
         void loadMonth(curYm, curToday);
       }
     });
     return unsubscribe;
-  }, [navigation, today, days, yearMonth, loadMonth]);
+  }, [navigation, loadMonth]);
 
   useEffect(() => {
     if (route.params?.resetKey) {
       const curYm = getLocalCurrentYm();
-      const curToday = today || getLocalToday();
+      const curToday = todayRef.current || getLocalToday();
       setTab('daily');
       setYearMonth(curYm);
-      if (days && days.length > 0) {
-        setSelectedDate(pickDefaultDate(days, curToday));
+      if (daysRef.current && daysRef.current.length > 0) {
+        setSelectedDate(pickDefaultDate(daysRef.current, curToday));
       } else {
         setSelectedDate(curToday);
       }
       scrollRef.current?.scrollTo({ y: 0, animated: false });
-      if (yearMonth !== curYm) {
+      if (yearMonthRef.current !== curYm) {
         void loadMonth(curYm, curToday);
       }
     }
-  }, [route.params?.resetKey, today, days, yearMonth, loadMonth]);
+  }, [route.params?.resetKey, loadMonth]);
 
   // Initial mount load & Instant SWR Cache-First Hydration (< 0.05s)
   useEffect(() => {
