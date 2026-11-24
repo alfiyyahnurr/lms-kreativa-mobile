@@ -16,6 +16,7 @@ import { FONTS, SHADOWS } from '../../constants/theme';
 import { HabitDayRecord, HabitCategoryItem } from '../../types';
 import AppHeader from '../../components/navigation/AppHeader';
 import PointsToast from '../../components/common/PointsToast';
+import EmptyState from '../../components/feedback/EmptyState';
 import { useStudentData } from '../../context/StudentDataContext';
 import { api } from '../../services/api';
 import { storage } from '../../services/storage';
@@ -957,7 +958,7 @@ export const HabitsScreen: React.FC = () => {
                   <Text style={styles.loadingText}>Loading…</Text>
                 </View>
               ) : sortedLb.length === 0 ? (
-                <Text style={styles.emptyStateText}>No class ranking yet.</Text>
+                <EmptyState icon="ribbon-outline" message="No class ranking yet." />
               ) : (
                 <View style={styles.rankList}>
                   {sortedLb.slice(0, 15).map((student, idx) => {

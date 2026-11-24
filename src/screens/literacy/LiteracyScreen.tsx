@@ -42,6 +42,7 @@ import { storage } from '../../services/storage';
 import AppHeader from '../../components/navigation/AppHeader';
 import { CalendarDatePickerModal } from '../../components/modals/CalendarDatePickerModal';
 import ToastAlert from '../../components/feedback/ToastAlert';
+import EmptyState from '../../components/feedback/EmptyState';
 
 interface DropdownModalState {
   title: string;
@@ -483,7 +484,7 @@ export const LiteracyScreen: React.FC = () => {
         setEntries((prev) => prev.map((e) => (String(e.id) === String(selectedEntry.id) ? updated : e)));
         setSelectedEntry(updated);
         setIsEditing(false);
-        showToastNotification('Reading entry updated successfully!', 'success');
+        showToastNotification('Entry updated', 'success');
       } else {
         const result = await api.literacy.create({
           title: formData.title.trim(),
@@ -840,12 +841,11 @@ export const LiteracyScreen: React.FC = () => {
                     </Text>
                   </View>
                 ) : entries.length === 0 ? (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No reading entries yet.</Text>
-                    <Text style={{ marginTop: 6, fontSize: 13, color: '#94A3B8', textAlign: 'center' }}>
-                      Tap "+ Add Entry" above to log your first reading text.
-                    </Text>
-                  </View>
+                  <EmptyState
+                    icon="library-outline"
+                    message="No reading entries yet."
+                    description="Tap + Add Entry above to log your first reading text."
+                  />
                 ) : (
                   <View style={styles.entryList}>
                     {entries.map((entry) => {

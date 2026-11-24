@@ -30,7 +30,7 @@ export const ToastAlert: React.FC<ToastAlertProps> = ({
   type = 'success',
   onHide,
   onClose,
-  duration = 3200,
+  duration = 4000,
   floating = true,
   position = 'top-right',
   topOffset,
@@ -105,8 +105,8 @@ export const ToastAlert: React.FC<ToastAlertProps> = ({
       case 'success':
       default:
         return {
-          icon: 'checkmark-circle-outline' as const,
-          bg: '#00A854', // Emerald Green matching user's reference image
+          icon: 'checkmark-circle' as const,
+          bg: '#16A34A', // Web LMS bg-green-600
         };
     }
   };
@@ -180,30 +180,31 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     gap: 8,
     alignSelf: 'flex-end',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 6,
-    maxWidth: '90%',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 8,
+    maxWidth: '92%',
   },
   icon: {
     marginRight: 0,
   },
   text: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 13.5,
+    fontFamily: FONTS.medium,
+    fontWeight: '500',
+    fontSize: 14,
     color: '#FFFFFF',
     includeFontPadding: false,
     flexShrink: 1,
   },
   closeBtn: {
-    marginLeft: 2,
+    marginLeft: 6,
     padding: 2,
   },
 });

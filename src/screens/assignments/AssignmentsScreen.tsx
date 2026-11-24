@@ -17,6 +17,7 @@ import AppHeader from '../../components/navigation/AppHeader';
 import ToastAlert from '../../components/feedback/ToastAlert';
 import CardSkeleton from '../../components/feedback/CardSkeleton';
 import ErrorState from '../../components/feedback/ErrorState';
+import EmptyState from '../../components/feedback/EmptyState';
 import { FONTS } from '../../constants/theme';
 import AssignmentDetailView from './AssignmentDetailView';
 
@@ -240,9 +241,10 @@ export const AssignmentsScreen: React.FC = () => {
               onRetry={() => fetchAssignments()}
             />
           ) : assignments.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No assignments found.</Text>
-            </View>
+            <EmptyState
+              icon="document-text-outline"
+              message="No assignments found."
+            />
           ) : (
             /* Card Grid View (100% Identical to Web LMS CardList - Grid Aja) */
             <View style={styles.cardList}>

@@ -246,8 +246,7 @@ export const CoursesScreen: React.FC = () => {
           ) : courses.length === 0 ? (
             <EmptyState
               icon="book-outline"
-              title="No Enrolled Courses"
-              subtitle="You are not currently enrolled in any academic courses for this semester."
+              message="No courses enrolled yet."
             />
           ) : (
             <View style={styles.contentSections}>

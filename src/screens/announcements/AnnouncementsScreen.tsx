@@ -17,6 +17,7 @@ import { api } from '../../services/api';
 import { storage } from '../../services/storage';
 import { Announcement } from '../../types';
 import AppHeader from '../../components/navigation/AppHeader';
+import EmptyState from '../../components/feedback/EmptyState';
 
 // Web LMS Design Tokens
 const SEC_HS = {
@@ -233,17 +234,15 @@ export const AnnouncementsScreen: React.FC = () => {
 
         {/* Empty State matching Web LMS */}
         {!loading && !error && filteredItems.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Ionicons name="megaphone-outline" size={32} color={SEC_HS.muted} style={{ marginBottom: 8 }} />
-            <Text style={styles.emptyTitle}>
-              {filter === 'unread' ? 'No unread announcements.' : 'No announcements.'}
-            </Text>
-            <Text style={styles.emptySubtitle}>
-              {filter === 'unread'
+          <EmptyState
+            icon="megaphone-outline"
+            message={filter === 'unread' ? 'No unread announcements.' : 'No announcements.'}
+            description={
+              filter === 'unread'
                 ? 'All recent updates have already been marked as read.'
-                : 'There are currently no active announcements from your school.'}
-            </Text>
-          </View>
+                : 'There are currently no active announcements from your school.'
+            }
+          />
         ) : null}
 
         {/* List of Announcement Cards matching Web LMS */}

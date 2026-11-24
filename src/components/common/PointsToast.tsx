@@ -54,8 +54,8 @@ export const PointsToast: React.FC<PointsToastProps> = ({ toast, onDismiss }) =>
   };
 
   const isError = toast.type === 'error';
-  const bgColor = isError ? '#DC2626' : '#00A854';
-  const iconName = isError ? 'close-circle' : 'checkmark-circle-outline';
+  const bgColor = isError ? '#DC2626' : '#16A34A';
+  const iconName = isError ? 'close-circle' : 'checkmark-circle';
 
   return (
     <Animated.View
@@ -86,17 +86,18 @@ export const PointsToast: React.FC<PointsToastProps> = ({ toast, onDismiss }) =>
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#00A854', // Emerald Green matching user reference image
-    borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
+    backgroundColor: '#16A34A', // Web LMS bg-green-600
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 8,
     marginBottom: 8,
     alignSelf: 'flex-end',
+    maxWidth: '92%',
   },
   contentRow: {
     flexDirection: 'row',
@@ -104,13 +105,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toastText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 13.5,
+    fontFamily: FONTS.medium,
+    fontWeight: '500',
+    fontSize: 14,
     color: '#FFFFFF',
     includeFontPadding: false,
   },
   closeBtn: {
-    marginLeft: 2,
+    marginLeft: 6,
     padding: 2,
   },
 });

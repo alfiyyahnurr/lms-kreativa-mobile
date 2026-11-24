@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import AppHeader from '../../components/navigation/AppHeader';
+import EmptyState from '../../components/feedback/EmptyState';
 import { FONTS, SHADOWS } from '../../constants/theme';
 import { api } from '../../services/api';
 import { storage } from '../../services/storage';
@@ -418,9 +419,7 @@ export const LeaderboardScreen: React.FC = () => {
         {activeTab === 'house' && !loading && (
           <View style={styles.tabContentContainer}>
             {houses.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyText}>No house points yet.</Text>
-              </View>
+              <EmptyState icon="trophy-outline" message="No house points yet." />
             ) : (
               <View style={styles.houseList}>
                 {houses.map((house, idx) => {
@@ -527,9 +526,7 @@ export const LeaderboardScreen: React.FC = () => {
             <Text style={styles.sectionSubtitle}>Ranking · {currentLevelLabel}</Text>
 
             {jenjangRows.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyText}>No jenjang rankings yet.</Text>
-              </View>
+              <EmptyState icon="trophy-outline" message="No jenjang rankings yet." />
             ) : (
               <View style={styles.tableCard}>
                 {/* Table Header */}
@@ -714,9 +711,7 @@ export const LeaderboardScreen: React.FC = () => {
 
             {/* Table below podium matching Web LMS */}
             {classRows.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyText}>No class rankings yet.</Text>
-              </View>
+              <EmptyState icon="trophy-outline" message="No class rankings yet." />
             ) : (
               <View style={styles.tableCard}>
                 {/* Table Header */}
