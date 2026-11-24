@@ -20,17 +20,10 @@ import {
 
 import {
   STUDENT_PROFILE,
-  LEADERBOARD_CLASS,
-  LEADERBOARD_HOUSES,
-  LEADERBOARD_JENJANG,
-  HABIT_GROUPS_INITIAL,
   ASSIGNMENTS_DATA,
   QUIZZES_DATA,
   EXAMS_DATA,
   GRADES_DATA,
-  ANNOUNCEMENTS_DATA,
-  INITIAL_LITERACY_ENTRIES,
-  DUMMY_LITERACY_ENTRIES,
   getCourseSessions,
   getCourseSessionDetail,
   getWeeklyPlanForWeek,
@@ -51,13 +44,8 @@ const MONTH_NAMES = [
 ];
 
 // Initial habits map per date (empty clean state, populated 100% from live backend API)
-const generateInitialHabitsByDate = (todayKey: string): Record<string, HabitGroup[]> => {
-  return {
-    [todayKey]: HABIT_GROUPS_INITIAL.map((g) => ({
-      ...g,
-      items: g.items.map((i) => ({ ...i, checked: false })),
-    })),
-  };
+const generateInitialHabitsByDate = (_todayKey: string): Record<string, HabitGroup[]> => {
+  return {};
 };
 
 const INITIAL_AWARDED_DATES: string[] = [];
@@ -101,6 +89,7 @@ interface StudentDataContextType {
   exams: ExamItem[];
   grades: SubjectGrade[];
   announcements: Announcement[];
+  fetchAnnouncements: (isRefresh?: boolean) => Promise<Announcement[]>;
   literacyEntries: LiteracyEntry[];
   addLiteracyEntry: (entry: LiteracyEntry, pointsAwarded?: number) => void;
   updateLiteracyEntry: (id: string | number, updated: Partial<LiteracyEntry>) => void;
@@ -226,6 +215,30 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return coursesRef.current;
   }, []);
 
+  // Announcements State (100% Live Backend)
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const announcementsRef = useRef<Announcement[]>([]);
+  announcementsRef.current = announcements;
+  const isAnnouncementsFetchingRef = useRef(false);
+
+  const fetchAnnouncements = useCallback(async (isRefresh = false): Promise<Announcement[]> => {
+    if (isAnnouncementsFetchingRef.current) return announcementsRef.current;
+    isAnnouncementsFetchingRef.current = true;
+    try {
+      const liveList = await api.announcements.list();
+      if (Array.isArray(liveList)) {
+        setAnnouncements(liveList);
+        announcementsRef.current = liveList;
+        return liveList;
+      }
+    } catch (err: any) {
+      console.warn('[Announcements Fetch Warning]', err?.message || err);
+    } finally {
+      isAnnouncementsFetchingRef.current = false;
+    }
+    return announcementsRef.current;
+  }, []);
+
   const isRefreshingAllRef = useRef(false);
   const refreshAllData = useCallback(async () => {
     if (isRefreshingAllRef.current) return;
@@ -244,6 +257,13 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
           ...prev,
           ...liveProfile,
         }));
+      }
+
+      // Sync announcements from live backend API
+      try {
+        await fetchAnnouncements(true);
+      } catch (e) {
+        // ignore
       }
 
       // Sync literacy logs from live backend API
@@ -267,7 +287,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       isRefreshingAllRef.current = false;
       setIsRefreshing(false);
     }
-  }, [fetchDashboardData, fetchCourses]);
+  }, [fetchDashboardData, fetchCourses, fetchAnnouncements]);
 
   // 1. Habits Per Date State (anchored to static October historical data, with today empty)
   const [habitsByDate, setHabitsByDate] = useState<Record<string, HabitGroup[]>>(() =>
@@ -333,6 +353,18 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     try {
       const res = await api.habits.getMonth(yearMonth);
       if (res && Array.isArray(res.days)) {
+        const defaultGroupsFromRes: HabitGroup[] = Array.isArray(res.categories)
+          ? res.categories.map((c: any) => ({
+              id: c.id,
+              title: c.label || c.name || c.id,
+              items: (c.items || []).map((text: string, idx: number) => ({
+                id: `${c.id}_${idx}`,
+                text,
+                checked: false,
+              })),
+            }))
+          : [];
+
         setHabitsByDate((prev) => {
           const next = { ...prev };
           res.days.forEach((dayRecord: any) => {
@@ -340,7 +372,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
             const dateStr = dayRecord.record_date;
             const baseGroups =
               next[dateStr] ||
-              HABIT_GROUPS_INITIAL.map((g) => ({
+              defaultGroupsFromRes.map((g) => ({
                 ...g,
                 items: g.items.map((i) => ({ ...i, checked: false })),
               }));
@@ -488,8 +520,8 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return null;
   }, [studentProfile.studentId]);
 
-  // House Leaderboard State (7 houses, dynamic points and breakdown)
-  const [houseLeaderboard, setHouseLeaderboard] = useState<LeaderboardHouse[]>([...LEADERBOARD_HOUSES]);
+  // House Leaderboard State (Clean empty state, fetched live from API)
+  const [houseLeaderboard, setHouseLeaderboard] = useState<LeaderboardHouse[]>([]);
 
   // Class Habits Leaderboard (Ranked SOLELY by habitsPts - populated live from API)
   const [classHabitsLeaderboard, setClassHabitsLeaderboard] = useState<LeaderboardStudent[]>([]);
@@ -498,11 +530,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [classLeaderboard, setClassLeaderboard] = useState<LeaderboardStudent[]>([]);
 
   // Jenjang Full Leaderboard (Ranked by TOTAL points D+L+H for Leaderboard screen tab 2)
-  const [jenjangLeaderboard, setJenjangLeaderboard] = useState<LeaderboardStudent[]>(() => {
-    return [...LEADERBOARD_JENJANG]
-      .sort((a, b) => b.points - a.points)
-      .map((s, idx) => ({ ...s, rank: idx + 1 }));
-  });
+  const [jenjangLeaderboard, setJenjangLeaderboard] = useState<LeaderboardStudent[]>([]);
 
   // Toast Notifications State
   const [toastList, setToastList] = useState<ToastNotification[]>([]);
@@ -685,12 +713,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     let targetItemText = '';
 
     setHabitsByDate((prev) => {
-      const existing =
-        prev[dateKey] ||
-        HABIT_GROUPS_INITIAL.map((g) => ({
-          ...g,
-          items: g.items.map((i) => ({ ...i, checked: false })),
-        }));
+      const existing = prev[dateKey] || [];
 
       const updated = existing.map((g) => {
         if (g.id !== groupId) return g;
@@ -846,11 +869,11 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const loadSampleLiteracyEntry = () => {
-    setLiteracyEntries([DUMMY_LITERACY_ENTRIES[0]]);
+    // Testing mock removed
   };
 
   const loadAllMockLiteracyEntries = () => {
-    setLiteracyEntries([...DUMMY_LITERACY_ENTRIES]);
+    // Testing mock removed
   };
 
   const clearLiteracyEntries = () => {
@@ -886,7 +909,8 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
         quizzes: QUIZZES_DATA,
         exams: EXAMS_DATA,
         grades: GRADES_DATA,
-        announcements: ANNOUNCEMENTS_DATA,
+        announcements,
+        fetchAnnouncements,
         literacyEntries,
         addLiteracyEntry,
         updateLiteracyEntry,

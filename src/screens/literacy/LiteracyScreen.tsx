@@ -19,8 +19,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, RADIUS, SPACING, SHADOWS, FONTS } from '../../constants/theme';
 import {
-  INITIAL_LITERACY_ENTRIES,
-  INITIAL_LITERACY_PROGRESS,
   LITERACY_TYPES,
   LITERACY_LANGUAGES,
   LITERACY_GENRES,
@@ -35,7 +33,8 @@ import {
   getReadingTypeTheme,
   getRatingLabel,
   getRatingScore,
-} from '../../data/mockData';
+  getCurriculumTargets,
+} from '../../constants/literacy';
 import { LiteracyEntry, LiteracyFormData, LiteracyProgressStats } from '../../types';
 import { useStudentData } from '../../context/StudentDataContext';
 import { api } from '../../services/api';
@@ -360,16 +359,19 @@ export const LiteracyScreen: React.FC = () => {
       }
     }
 
+    const targets = getCurriculumTargets('sma');
+    const trackLabel = 'SMA';
+
     return {
       textsRead,
-      textsTarget: INITIAL_LITERACY_PROGRESS.textsTarget,
+      textsTarget: targets.texts,
       genreVariety: uniqueGenres,
-      genreTarget: INITIAL_LITERACY_PROGRESS.genreTarget,
+      genreTarget: targets.genres,
       avgRating,
       englishPercentage,
-      englishTargetPercentage: INITIAL_LITERACY_PROGRESS.englishTargetPercentage,
-      level: INITIAL_LITERACY_PROGRESS.level,
-      schoolLevel: INITIAL_LITERACY_PROGRESS.schoolLevel,
+      englishTargetPercentage: targets.englishPct,
+      level: trackLabel,
+      schoolLevel: trackLabel,
     };
   }, [entries, liveStats]);
 

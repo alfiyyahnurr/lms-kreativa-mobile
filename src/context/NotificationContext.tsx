@@ -9,14 +9,14 @@ interface NotificationContextType {
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Global unread notifications count, initially 2
-  const [unreadCount, setUnreadCount] = useState<number>(2);
+  // Global unread notifications count, default 0
+  const [unreadCount, setUnreadCount] = useState<number>(0);
 
   const markAllAsRead = () => {
     setUnreadCount(0);
   };
 
-  const resetUnread = (count: number = 2) => {
+  const resetUnread = (count: number = 0) => {
     setUnreadCount(count);
   };
 

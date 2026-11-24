@@ -44,24 +44,20 @@ import {
   QUIZZES_DATA,
   EXAMS_DATA,
   GRADES_DATA,
-  ANNOUNCEMENTS_DATA,
-  LEADERBOARD_CLASS,
-  LEADERBOARD_HOUSES,
-  LEADERBOARD_JENJANG,
-  INITIAL_LITERACY_ENTRIES,
-  DUMMY_LITERACY_ENTRIES,
-  INITIAL_LITERACY_PROGRESS,
   WEEKLY_SCHEDULE,
   getWeeklyPlanForWeek,
-  HABIT_GROUPS_INITIAL,
   MOCK_PUBLISHED_CARDS_SUMMARY,
   MOCK_PUBLISHED_CARDS_DETAIL,
+} from '../data/mockData';
+
+import {
   getReadingTypeLabel,
   getReadingTypeId,
   getReadingTypeColor,
   getRatingLabel,
   getRatingScore,
-} from '../data/mockData';
+  getCurriculumTargets,
+} from '../constants/literacy';
 
 export const API_BASE_URL = 'https://learn.kreativaglobal.sch.id';
 
@@ -1330,7 +1326,7 @@ export const api = {
   announcements: {
     // GET {{baseUrl}}/api/announcements
     list: async (): Promise<Announcement[]> => {
-      const rawList = await requestApi<any[]>('/api/announcements', 'GET', undefined, [...ANNOUNCEMENTS_DATA]);
+      const rawList = await requestApi<any[]>('/api/announcements', 'GET', undefined, []);
       if (!Array.isArray(rawList)) return [];
 
       return rawList.map((item: any) => {
@@ -1495,7 +1491,7 @@ export const api = {
         `/api/student/habits/week?weekStart=${encodeURIComponent(weekStart)}`,
         'GET',
         undefined,
-        HABIT_GROUPS_INITIAL
+        []
       );
     },
 
@@ -1570,23 +1566,25 @@ export const api = {
         const liveStats = await requestApi<any>(url, 'GET');
         if (liveStats && (typeof liveStats.totalEntries === 'number' || typeof liveStats.textsRead === 'number')) {
           const textsRead = liveStats.totalEntries ?? liveStats.textsRead ?? 0;
+          const defaultTargets = getCurriculumTargets(liveStats.track || 'sma');
           const targets = liveStats.targets || {};
           return {
             textsRead,
-            textsTarget: targets.texts ?? INITIAL_LITERACY_PROGRESS.textsTarget,
+            textsTarget: targets.texts ?? defaultTargets.texts,
             genreVariety: liveStats.genreVariety ?? 0,
-            genreTarget: targets.genres ?? INITIAL_LITERACY_PROGRESS.genreTarget,
+            genreTarget: targets.genres ?? defaultTargets.genres,
             avgRating: liveStats.avgRating != null ? String(liveStats.avgRating) : '—',
             englishPercentage: liveStats.englishPct ?? liveStats.englishPercentage ?? 0,
-            englishTargetPercentage: targets.englishPct ?? INITIAL_LITERACY_PROGRESS.englishTargetPercentage,
-            level: liveStats.track?.toUpperCase() || INITIAL_LITERACY_PROGRESS.level,
-            schoolLevel: liveStats.track?.toUpperCase() || INITIAL_LITERACY_PROGRESS.schoolLevel,
+            englishTargetPercentage: targets.englishPct ?? defaultTargets.englishPct,
+            level: liveStats.track?.toUpperCase() || 'SMA',
+            schoolLevel: liveStats.track?.toUpperCase() || 'SMA',
           };
         }
       } catch (err) {
         console.warn('[Literacy Stats API Error]', err);
       }
 
+      const defaultTargets = getCurriculumTargets('sma');
       const textsRead = inMemoryLiteracyEntries.length;
       const uniqueGenres = new Set(inMemoryLiteracyEntries.map((e) => e.genre).filter(Boolean)).size;
       const englishCount = inMemoryLiteracyEntries.filter((e) => e.language === 'English').length;
@@ -1617,14 +1615,14 @@ export const api = {
 
       return {
         textsRead,
-        textsTarget: INITIAL_LITERACY_PROGRESS.textsTarget,
+        textsTarget: defaultTargets.texts,
         genreVariety: uniqueGenres,
-        genreTarget: INITIAL_LITERACY_PROGRESS.genreTarget,
+        genreTarget: defaultTargets.genres,
         avgRating,
         englishPercentage,
-        englishTargetPercentage: INITIAL_LITERACY_PROGRESS.englishTargetPercentage,
-        level: INITIAL_LITERACY_PROGRESS.level,
-        schoolLevel: INITIAL_LITERACY_PROGRESS.schoolLevel,
+        englishTargetPercentage: defaultTargets.englishPct,
+        level: 'SMA',
+        schoolLevel: 'SMA',
       };
     },
 
@@ -1735,16 +1733,6 @@ export const api = {
     },
 
     // Dynamic helpers
-    loadSample: async (): Promise<LiteracyEntry[]> => {
-      inMemoryLiteracyEntries = [DUMMY_LITERACY_ENTRIES[0]];
-      return [...inMemoryLiteracyEntries];
-    },
-
-    loadAllMock: async (): Promise<LiteracyEntry[]> => {
-      inMemoryLiteracyEntries = [...DUMMY_LITERACY_ENTRIES];
-      return [...inMemoryLiteracyEntries];
-    },
-
     clearAll: async (): Promise<LiteracyEntry[]> => {
       inMemoryLiteracyEntries = [];
       return [];
