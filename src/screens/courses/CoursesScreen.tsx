@@ -18,6 +18,9 @@ import CourseDetailView from './CourseDetailView';
 import EmptyState from '../../components/feedback/EmptyState';
 import ErrorState from '../../components/feedback/ErrorState';
 import CardSkeleton from '../../components/feedback/CardSkeleton';
+import ViewToggle from '../../components/common/ViewToggle';
+import DataTable, { TableColumn } from '../../components/common/DataTable';
+import { useViewPreference } from '../../hooks/useViewPreference';
 
 interface SelfPacedCardProps {
   course: Course;
@@ -140,6 +143,7 @@ export const CoursesScreen: React.FC = () => {
   } = useStudentData();
 
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [view, setView] = useViewPreference('courses');
   const [localRefreshing, setLocalRefreshing] = useState(false);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -207,6 +211,61 @@ export const CoursesScreen: React.FC = () => {
   const selfPacedCourses = courses.filter((c) => c.course_format === 'self_paced');
   const classCourses = courses.filter((c) => c.course_format !== 'self_paced');
 
+  const courseColumns: TableColumn<Course>[] = [
+    {
+      key: 'name',
+      header: 'Course',
+      width: 190,
+      render: (c) => (
+        <Text style={styles.tablePrimaryText} numberOfLines={2}>
+          {c.name || c.subject_name}
+        </Text>
+      ),
+    },
+    {
+      key: 'code',
+      header: 'Code',
+      width: 95,
+      render: (c) => (
+        <View style={styles.codeBadge}>
+          <Text style={styles.codeBadgeText}>{c.subject_code || c.code || 'CRS'}</Text>
+        </View>
+      ),
+    },
+    {
+      key: 'teacher',
+      header: 'Teacher',
+      width: 150,
+      render: (c) => (
+        <Text style={styles.tableSecondaryText} numberOfLines={1}>
+          {c.teacher_name || c.teacher || 'No teacher assigned'}
+        </Text>
+      ),
+    },
+    {
+      key: 'sessions',
+      header: 'Sessions',
+      width: 100,
+      render: (c) => (
+        <Text style={styles.tableSecondaryText}>
+          {c.course_format === 'self_paced'
+            ? `${Math.round(Number(c.completion_pct) || 0)}%`
+            : `${Number(c.session_count ?? c.sessions ?? 0)} sessions`}
+        </Text>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 90,
+      render: (c) => (
+        <View style={styles.statusPill}>
+          <Text style={styles.statusPillText}>{c.status || 'active'}</Text>
+        </View>
+      ),
+    },
+  ];
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <AppHeader title="My Courses" />
@@ -238,14 +297,17 @@ export const CoursesScreen: React.FC = () => {
         >
           {/* Header Title */}
           <View style={styles.headerBox}>
-            <Text style={styles.pageTitle}>My Courses</Text>
-            <Text style={styles.pageSubtitle}>
-              {coursesAcademicYearId != null
-                ? `Academic Year ${coursesAcademicYearId}`
-                : studentProfile?.academicYearName
-                  ? `Academic Year ${studentProfile.academicYearName}`
-                  : 'Academic Year'}
-            </Text>
+            <View style={styles.headerTextWrap}>
+              <Text style={styles.pageTitle}>My Courses</Text>
+              <Text style={styles.pageSubtitle}>
+                {coursesAcademicYearId != null
+                  ? `Academic Year ${coursesAcademicYearId}`
+                  : studentProfile?.academicYearName
+                    ? `Academic Year ${studentProfile.academicYearName}`
+                    : 'Academic Year'}
+              </Text>
+            </View>
+            <ViewToggle view={view} onChange={setView} />
           </View>
 
           {/* Data State Guards */}
@@ -261,6 +323,12 @@ export const CoursesScreen: React.FC = () => {
             <EmptyState
               icon="book-outline"
               message="No courses enrolled yet."
+            />
+          ) : view === 'table' ? (
+            <DataTable
+              columns={courseColumns}
+              data={courses}
+              onRowPress={(c) => setSelectedCourse(c)}
             />
           ) : (
             <View style={styles.contentSections}>
@@ -319,7 +387,24 @@ const styles = StyleSheet.create({
     paddingBottom: 108,
   },
   headerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 20,
+  },
+  headerTextWrap: {
+    flex: 1,
+  },
+  tablePrimaryText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  tableSecondaryText: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: '#475569',
   },
   pageTitle: {
     fontFamily: FONTS.title,

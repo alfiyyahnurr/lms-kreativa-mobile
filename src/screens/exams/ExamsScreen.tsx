@@ -10,12 +10,16 @@ import ErrorState from '../../components/feedback/ErrorState';
 import { FONTS, SHADOWS, COLORS } from '../../constants/theme';
 import Badge from '../../components/common/Badge';
 import QuizTakingScreen from '../quizzes/QuizTakingScreen';
+import ViewToggle from '../../components/common/ViewToggle';
+import DataTable, { TableColumn } from '../../components/common/DataTable';
+import { useViewPreference } from '../../hooks/useViewPreference';
 
 export const ExamsScreen: React.FC = () => {
   const { exams, isRefreshing, isError, errorMessage, refreshAllData } = useStudentData();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const [activeExam, setActiveExam] = useState<ExamItem | null>(null);
+  const [view, setView] = useViewPreference('exams');
   const scrollRef = useRef<any>(null);
 
   useFocusEffect(
@@ -85,8 +89,11 @@ export const ExamsScreen: React.FC = () => {
       >
         {/* Header Title matching Screenshot 110159 */}
         <View style={styles.headerBox}>
-          <Text style={styles.pageTitle}>Exams</Text>
-          <Text style={styles.pageSubtitle}>Upcoming and available exams</Text>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.pageTitle}>Exams</Text>
+            <Text style={styles.pageSubtitle}>Upcoming and available exams</Text>
+          </View>
+          <ViewToggle view={view} onChange={setView} />
         </View>
 
         {isError ? (
@@ -102,6 +109,65 @@ export const ExamsScreen: React.FC = () => {
               No exams scheduled.
             </Text>
           </View>
+        ) : view === 'table' ? (
+          <DataTable
+            columns={[
+              {
+                key: 'course',
+                header: 'Course',
+                width: 180,
+                render: (e) => (
+                  <Text style={{ fontFamily: FONTS.semiBold, fontSize: 13, color: '#0F172A' }} numberOfLines={2}>
+                    {e.course}
+                  </Text>
+                ),
+              },
+              {
+                key: 'type',
+                header: 'Type',
+                width: 95,
+                render: () => <Badge color="purple">Midterm</Badge>,
+              },
+              {
+                key: 'date',
+                header: 'Date',
+                width: 110,
+                render: (e) => (
+                  <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#475569' }}>
+                    {e.date || '-'}
+                  </Text>
+                ),
+              },
+              {
+                key: 'time',
+                header: 'Time',
+                width: 95,
+                render: (e) => (
+                  <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#475569' }}>
+                    {e.time || '-'}
+                  </Text>
+                ),
+              },
+              {
+                key: 'room',
+                header: 'Room',
+                width: 110,
+                render: (e) => (
+                  <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#475569' }}>
+                    {e.room || 'Main Hall'}
+                  </Text>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                width: 100,
+                render: (e) => <Badge color="orange">{e.status || 'upcoming'}</Badge>,
+              },
+            ] as TableColumn<ExamItem>[]}
+            data={exams}
+            onRowPress={(exam) => setActiveExam(exam)}
+          />
         ) : (
           <View style={styles.cardList}>
             {exams.map((exam) => (
@@ -150,7 +216,14 @@ const styles = StyleSheet.create({
     paddingBottom: 108,
   },
   headerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 20,
+  },
+  headerTextWrap: {
+    flex: 1,
   },
   pageTitle: {
     fontFamily: FONTS.title,

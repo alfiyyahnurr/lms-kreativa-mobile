@@ -34,6 +34,9 @@ import AssignmentDetailView from '../assignments/AssignmentDetailView';
 import SessionDetailView from './SessionDetailView';
 import LearnItemView from './LearnItemView';
 import CalendarDatePickerModal from '../../components/modals/CalendarDatePickerModal';
+import ViewToggle from '../../components/common/ViewToggle';
+import DataTable, { TableColumn } from '../../components/common/DataTable';
+import { useViewPreference } from '../../hooks/useViewPreference';
 
 interface CourseDetailViewProps {
   course: Course;
@@ -54,6 +57,7 @@ const PRE_POST_OPTIONS: { key: PrePostOption; label: string }[] = [
 
 export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ course, onBack }) => {
   const { coursesAcademicYearId, studentProfile } = useStudentData();
+  const [view, setView] = useViewPreference('course-detail');
   const isSelfPaced = course.course_format === 'self_paced';
 
   // Navigation states
@@ -728,6 +732,107 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ course, onBa
     { key: 'forums', label: 'Forums' },
   ];
 
+  const sessionColumns: TableColumn<CourseSession>[] = [
+    {
+      key: 'title',
+      header: 'Session',
+      width: 190,
+      render: (s) => (
+        <Text style={{ fontFamily: FONTS.semiBold, fontSize: 13, color: '#0F172A' }} numberOfLines={2}>
+          {s.sessionNumber}. {s.title}
+        </Text>
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      width: 110,
+      render: (s) => (
+        <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#475569' }}>
+          {s.date || 'TBA'}
+        </Text>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 95,
+      render: (s) => (
+        <View style={styles.scheduledPill}>
+          <Text style={styles.scheduledPillText}>{s.status}</Text>
+        </View>
+      ),
+    },
+  ];
+
+  const courseAssignmentColumns: TableColumn<Assignment>[] = [
+    {
+      key: 'title',
+      header: 'Title',
+      width: 190,
+      render: (a) => (
+        <Text style={{ fontFamily: FONTS.semiBold, fontSize: 13, color: '#0F172A' }} numberOfLines={2}>
+          {a.title}
+        </Text>
+      ),
+    },
+    {
+      key: 'due',
+      header: 'Due Date',
+      width: 115,
+      render: (a) => (
+        <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#475569' }}>
+          {a.dueDate || 'No due date'}
+        </Text>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 95,
+      render: (a) => (
+        <View style={[styles.pendingPill, a.status === 'graded' && styles.gradedPill]}>
+          <Text style={[styles.pendingPillText, a.status === 'graded' && styles.gradedPillText]}>
+            {a.status}
+          </Text>
+        </View>
+      ),
+    },
+  ];
+
+  const courseQuizColumns: TableColumn<Quiz>[] = [
+    {
+      key: 'title',
+      header: 'Title',
+      width: 190,
+      render: (q) => (
+        <Text style={{ fontFamily: FONTS.semiBold, fontSize: 13, color: '#0F172A' }} numberOfLines={2}>
+          {q.title}
+        </Text>
+      ),
+    },
+    {
+      key: 'duration',
+      header: 'Duration',
+      width: 95,
+      render: (q) => (
+        <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#475569' }}>
+          {q.duration || '-'}
+        </Text>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 95,
+      render: (q) => (
+        <View style={styles.scheduledPill}>
+          <Text style={styles.scheduledPillText}>{q.status}</Text>
+        </View>
+      ),
+    },
+  ];
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -759,8 +864,11 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ course, onBa
         <View style={styles.headerBlock}>
           <View style={styles.headerTitleRow}>
             <Text style={styles.courseTitle}>{course.name || course.subject_name}</Text>
-            <View style={styles.activePill}>
-              <Text style={styles.activePillText}>{course.status || 'active'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={styles.activePill}>
+                <Text style={styles.activePillText}>{course.status || 'active'}</Text>
+              </View>
+              <ViewToggle view={view} onChange={setView} />
             </View>
           </View>
 
@@ -992,7 +1100,7 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ course, onBa
               </Text>
             </View>
 
-            {/* Individual Session Cards */}
+            {/* Individual Session Cards or Table */}
             {filteredSessions.length === 0 ? (
               <View style={styles.emptySessionsContainer}>
                 <Text style={styles.emptySessionsText}>
@@ -1008,6 +1116,12 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ course, onBa
                   </TouchableOpacity>
                 )}
               </View>
+            ) : view === 'table' ? (
+              <DataTable
+                columns={sessionColumns}
+                data={filteredSessions}
+                onRowPress={(session) => handleOpenFullSession(session)}
+              />
             ) : (
               filteredSessions.map((session) => {
                 const isExpanded = expandedSessionId === session.id;
@@ -1153,6 +1267,12 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ course, onBa
               <View style={styles.emptyCenteredContainer}>
                 <Text style={styles.emptyCenteredText}>No assignments assigned yet.</Text>
               </View>
+            ) : view === 'table' ? (
+              <DataTable
+                columns={courseAssignmentColumns}
+                data={liveAssignments}
+                onRowPress={(assignment) => setSelectedAssignment(assignment)}
+              />
             ) : (
               liveAssignments.map((assignment) => (
                 <TouchableOpacity
@@ -1195,6 +1315,8 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ course, onBa
               <View style={styles.emptyCenteredContainer}>
                 <Text style={styles.emptyCenteredText}>No checkpoint quizzes yet.</Text>
               </View>
+            ) : view === 'table' ? (
+              <DataTable columns={courseQuizColumns} data={liveQuizzes} />
             ) : (
               liveQuizzes.map((quiz) => (
                 <View key={quiz.id} style={styles.assignmentCard}>

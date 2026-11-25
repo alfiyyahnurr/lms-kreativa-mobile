@@ -20,6 +20,9 @@ import ErrorState from '../../components/feedback/ErrorState';
 import EmptyState from '../../components/feedback/EmptyState';
 import { FONTS } from '../../constants/theme';
 import AssignmentDetailView from './AssignmentDetailView';
+import ViewToggle from '../../components/common/ViewToggle';
+import DataTable, { TableColumn } from '../../components/common/DataTable';
+import { useViewPreference } from '../../hooks/useViewPreference';
 
 export const AssignmentsScreen: React.FC = () => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -31,6 +34,7 @@ export const AssignmentsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<BottomTabParamList, 'AssignmentsTab'>>();
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [view, setView] = useViewPreference('assignments');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const scrollRef = useRef<any>(null);
 
@@ -231,8 +235,11 @@ export const AssignmentsScreen: React.FC = () => {
         >
           {/* Header Title & Subtitle matching Web LMS */}
           <View style={styles.headerBox}>
-            <Text style={styles.pageTitle}>Assignments</Text>
-            <Text style={styles.pageSubtitle}>All assignments across your courses</Text>
+            <View style={styles.headerTextWrap}>
+              <Text style={styles.pageTitle}>Assignments</Text>
+              <Text style={styles.pageSubtitle}>All assignments across your courses</Text>
+            </View>
+            <ViewToggle view={view} onChange={setView} />
           </View>
 
           {/* Loading & Error States */}
@@ -248,6 +255,96 @@ export const AssignmentsScreen: React.FC = () => {
             <EmptyState
               icon="document-text-outline"
               message="No assignments found."
+            />
+          ) : view === 'table' ? (
+            <DataTable
+              columns={[
+                {
+                  key: 'title',
+                  header: 'Title',
+                  width: 190,
+                  render: (a) => (
+                    <Text style={{ fontFamily: FONTS.semiBold, fontSize: 13, color: '#0F172A' }} numberOfLines={2}>
+                      {a.title}
+                    </Text>
+                  ),
+                },
+                {
+                  key: 'course',
+                  header: 'Course',
+                  width: 150,
+                  render: (a) => (
+                    <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#475569' }} numberOfLines={2}>
+                      {a.course_name || a.course || 'Course'}
+                    </Text>
+                  ),
+                },
+                {
+                  key: 'due_date',
+                  header: 'Due Date',
+                  width: 115,
+                  render: (a) => (
+                    <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#475569' }}>
+                      {formatDueDate(a.due_date || a.dueDate)}
+                    </Text>
+                  ),
+                },
+                {
+                  key: 'score',
+                  header: 'Score',
+                  width: 85,
+                  render: (a) => {
+                    const sc =
+                      a.submission_score != null
+                        ? a.submission_score
+                        : a.score && a.score !== '—'
+                          ? a.score
+                          : null;
+                    return sc != null ? (
+                      <Text style={{ fontFamily: FONTS.bold, fontSize: 13, color: '#16A34A' }}>
+                        {formatScoreDisplay(sc)}/{a.max_score || 100}
+                      </Text>
+                    ) : (
+                      <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#94A3B8' }}>-</Text>
+                    );
+                  },
+                },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  width: 95,
+                  render: (a) => {
+                    const st = a.submission_status || a.status || 'pending';
+                    return (
+                      <View
+                        style={[
+                          styles.badgePill,
+                          st === 'graded'
+                            ? styles.badgeGraded
+                            : st === 'submitted'
+                              ? styles.badgeSubmitted
+                              : styles.badgePending,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.badgePillText,
+                            st === 'graded'
+                              ? styles.badgeTextGraded
+                              : st === 'submitted'
+                                ? styles.badgeTextSubmitted
+                                : styles.badgeTextPending,
+                          ]}
+                        >
+                          {st}
+                        </Text>
+                      </View>
+                    );
+                  },
+                },
+              ] as TableColumn<Assignment>[]}
+              data={assignments}
+              onRowPress={handleSelectAssignment}
             />
           ) : (
             /* Card Grid View (100% Identical to Web LMS CardList - Grid Aja) */
@@ -334,7 +431,14 @@ const styles = StyleSheet.create({
     paddingBottom: 108,
   },
   headerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 16,
+  },
+  headerTextWrap: {
+    flex: 1,
   },
   pageTitle: {
     fontFamily: FONTS.title,

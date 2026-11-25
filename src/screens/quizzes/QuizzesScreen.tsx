@@ -12,6 +12,9 @@ import EmptyState from '../../components/feedback/EmptyState';
 import ErrorState from '../../components/feedback/ErrorState';
 import CardSkeleton from '../../components/feedback/CardSkeleton';
 import QuizTakingScreen from './QuizTakingScreen';
+import ViewToggle from '../../components/common/ViewToggle';
+import DataTable, { TableColumn } from '../../components/common/DataTable';
+import { useViewPreference } from '../../hooks/useViewPreference';
 
 export const QuizzesScreen: React.FC = () => {
   const {
@@ -25,6 +28,7 @@ export const QuizzesScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
+  const [view, setView] = useViewPreference('quizzes');
   const scrollRef = useRef<any>(null);
 
   useFocusEffect(
@@ -86,8 +90,11 @@ export const QuizzesScreen: React.FC = () => {
       >
         {/* Header Title matching Screenshot */}
         <View style={styles.headerBox}>
-          <Text style={styles.pageTitle}>Quizzes</Text>
-          <Text style={styles.pageSubtitle}>All quizzes across your courses</Text>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.pageTitle}>Quizzes</Text>
+            <Text style={styles.pageSubtitle}>All quizzes across your courses</Text>
+          </View>
+          <ViewToggle view={view} onChange={setView} />
         </View>
 
         {/* Data State Guards */}
@@ -104,6 +111,77 @@ export const QuizzesScreen: React.FC = () => {
             icon="help-circle-outline"
             title="No Quizzes Available"
             subtitle="There are currently no checkpoint quizzes or tests scheduled."
+          />
+        ) : view === 'table' ? (
+          <DataTable
+            columns={[
+              {
+                key: 'title',
+                header: 'Title',
+                width: 190,
+                render: (q) => (
+                  <Text style={{ fontFamily: FONTS.semiBold, fontSize: 13, color: '#0F172A' }} numberOfLines={2}>
+                    {q.title}
+                  </Text>
+                ),
+              },
+              {
+                key: 'course',
+                header: 'Course',
+                width: 150,
+                render: (q) => (
+                  <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#475569' }} numberOfLines={2}>
+                    {q.course}
+                  </Text>
+                ),
+              },
+              {
+                key: 'duration',
+                header: 'Duration',
+                width: 95,
+                render: (q) => (
+                  <Text style={{ fontFamily: FONTS.regular, fontSize: 13, color: '#475569' }}>
+                    {q.duration || '-'}
+                  </Text>
+                ),
+              },
+              {
+                key: 'score',
+                header: 'Score',
+                width: 80,
+                render: (q) => (
+                  <Text
+                    style={{
+                      fontFamily: q.score && q.score !== '—' ? FONTS.bold : FONTS.regular,
+                      fontSize: 13,
+                      color: q.score && q.score !== '—' ? '#16A34A' : '#94A3B8',
+                    }}
+                  >
+                    {q.score && q.score !== '—' ? q.score : '-'}
+                  </Text>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                width: 105,
+                render: (q) => (
+                  <Badge
+                    color={
+                      q.status === 'completed'
+                        ? 'green'
+                        : q.status === 'in progress'
+                          ? 'blue'
+                          : 'orange'
+                    }
+                  >
+                    {q.status}
+                  </Badge>
+                ),
+              },
+            ] as TableColumn<Quiz>[]}
+            data={quizzes}
+            onRowPress={(quiz) => setActiveQuiz(quiz)}
           />
         ) : (
           /* Pure Card List matching Web quizzes-list-client */
@@ -164,7 +242,14 @@ const styles = StyleSheet.create({
     paddingBottom: 108,
   },
   headerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 20,
+  },
+  headerTextWrap: {
+    flex: 1,
   },
   pageTitle: {
     fontFamily: FONTS.title,
