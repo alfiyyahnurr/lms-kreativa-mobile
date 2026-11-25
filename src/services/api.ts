@@ -572,23 +572,22 @@ export const api = {
   // ==========================================
   profile: {
     // GET {{baseUrl}}/api/profile
-    getProfile: async (): Promise<StudentProfile> => {
-      const res = await requestApi<any>('/api/profile', 'GET', undefined, STUDENT_PROFILE);
+    getProfile: async (): Promise<Partial<StudentProfile>> => {
+      const res = await requestApi<any>('/api/profile', 'GET');
       if (res && (res.fullName || res.email)) {
         return {
-          ...STUDENT_PROFILE,
-          userId: res.userId || STUDENT_PROFILE.userId,
-          studentId: res.studentId || STUDENT_PROFILE.studentId,
-          schoolId: res.schoolId || STUDENT_PROFILE.schoolId,
-          fullName: res.fullName || STUDENT_PROFILE.fullName,
-          email: res.email || STUDENT_PROFILE.email,
-          schoolName: res.schoolName || STUDENT_PROFILE.schoolName,
-          className: res.className || STUDENT_PROFILE.className,
-          academicYearName: res.academicYear || STUDENT_PROFILE.academicYearName,
-          house: res.houseName || STUDENT_PROFILE.house,
+          userId: Number(res.userId),
+          studentId: Number(res.studentId),
+          studentCode: res.studentCode ?? null,
+          fullName: res.fullName ?? '',
+          email: res.email ?? '',
+          schoolName: res.schoolName ?? '',
+          className: res.className ?? null,
+          academicYearName: res.academicYear ?? null,
+          house: res.houseName ?? null,
         };
       }
-      return { ...STUDENT_PROFILE };
+      throw new ApiError('Profile data not available.', 404);
     },
   },
 

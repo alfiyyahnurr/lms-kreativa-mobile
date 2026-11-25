@@ -1,6 +1,7 @@
 export interface StudentProfile {
   userId: number;
   studentId: number;
+  studentCode?: string | null;
   schoolId: number;
   fullName: string;
   email: string;
@@ -8,8 +9,8 @@ export interface StudentProfile {
   schoolName: string;
   schoolLevel: string;
   classId: number;
-  className: string;
-  academicYearName: string;
+  className: string | null;
+  academicYearName: string | null;
   house: string | null;
   points: number;
   disciplinePts: number;
