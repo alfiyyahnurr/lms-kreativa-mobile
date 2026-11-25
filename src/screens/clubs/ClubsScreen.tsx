@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { Trophy, Image as ImageIcon } from 'lucide-react-native';
-import { api } from '../../services/api';
+import { api, API_BASE_URL } from '../../services/api';
 import { storage } from '../../services/storage';
 import { ClubItem, ClubReportItem } from '../../types';
 import AppHeader from '../../components/navigation/AppHeader';
@@ -20,6 +20,35 @@ import EmptyState from '../../components/feedback/EmptyState';
 import ClubDetailView from './ClubDetailView';
 
 const WEEKDAY_EN = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function resolveMediaUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const raw = String(url).trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return raw;
+  const path = raw.startsWith('/') ? raw : `/${raw}`;
+  return `${API_BASE_URL}${path}`;
+}
+
+function getFirstPhotoUrl(r: ClubReportItem): string | null {
+  const main = resolveMediaUrl(r.photo_url);
+  if (main) return main;
+  let extra: unknown = r.photo_urls;
+  if (typeof extra === 'string') {
+    try {
+      extra = JSON.parse(extra);
+    } catch {
+      extra = null;
+    }
+  }
+  if (Array.isArray(extra)) {
+    for (const u of extra) {
+      const resolved = resolveMediaUrl(typeof u === 'string' ? u : null);
+      if (resolved) return resolved;
+    }
+  }
+  return null;
+}
 
 function formatWeekly(c: ClubItem): string {
   const day = c.meeting_weekday != null ? WEEKDAY_EN[Number(c.meeting_weekday)] : '';
@@ -239,7 +268,7 @@ export const ClubsScreen: React.FC = () => {
             ) : (
               <View style={styles.reportsGrid}>
                 {recentReports.map((r) => {
-                  const photoUrl = r.photo_url || (Array.isArray(r.photo_urls) ? r.photo_urls[0] : null);
+                  const photoUrl = getFirstPhotoUrl(r);
                   let formattedDate = '';
                   if (r.created_at) {
                     try {

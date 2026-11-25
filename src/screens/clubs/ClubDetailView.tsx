@@ -11,7 +11,7 @@ import {
   Linking,
 } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
-import { api } from '../../services/api';
+import { api, API_BASE_URL } from '../../services/api';
 import { storage } from '../../services/storage';
 import { ClubDetailData, ClubItem, ClubReportItem } from '../../types';
 
@@ -34,12 +34,32 @@ function formatWeekly(c?: ClubItem): string {
     .join(' · ');
 }
 
+function resolveMediaUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const raw = String(url).trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return raw;
+  const path = raw.startsWith('/') ? raw : `/${raw}`;
+  return `${API_BASE_URL}${path}`;
+}
+
 function collectPhotos(r: ClubReportItem): string[] {
   const photos: string[] = [];
-  if (r.photo_url) photos.push(String(r.photo_url));
-  if (Array.isArray(r.photo_urls)) {
-    for (const u of r.photo_urls) {
-      if (u && !photos.includes(String(u))) photos.push(String(u));
+  const main = resolveMediaUrl(r.photo_url);
+  if (main) photos.push(main);
+
+  let extra: unknown = r.photo_urls;
+  if (typeof extra === 'string') {
+    try {
+      extra = JSON.parse(extra);
+    } catch {
+      extra = null;
+    }
+  }
+  if (Array.isArray(extra)) {
+    for (const u of extra) {
+      const resolved = resolveMediaUrl(typeof u === 'string' ? u : null);
+      if (resolved && !photos.includes(resolved)) photos.push(resolved);
     }
   }
   return photos;
@@ -281,7 +301,7 @@ export const ClubDetailView: React.FC<ClubDetailViewProps> = ({
             ) : (
               <View style={styles.listGap}>
                 {materials.map((m) => {
-                  const targetUrl = m.external_url || m.file_url;
+                  const targetUrl = resolveMediaUrl(m.external_url || m.file_url);
                   return (
                     <View key={String(m.id)} style={styles.itemCard}>
                       {targetUrl ? (
