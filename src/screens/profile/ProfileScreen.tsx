@@ -10,7 +10,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { useStudentData } from '../../context/StudentDataContext';
-import { api } from '../../services/api';
 import { storage } from '../../services/storage';
 import { StudentProfile } from '../../types';
 import AppHeader from '../../components/navigation/AppHeader';
@@ -19,7 +18,7 @@ import ErrorState from '../../components/feedback/ErrorState';
 import { FONTS, SHADOWS } from '../../constants/theme';
 
 export const ProfileScreen: React.FC = () => {
-  const { studentProfile, setStudentProfile } = useStudentData();
+  const { studentProfile, fetchProfile } = useStudentData();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const scrollRef = useRef<any>(null);
@@ -58,7 +57,7 @@ export const ProfileScreen: React.FC = () => {
     };
   }, []);
 
-  // Fetch live profile from GET /api/profile
+  // Fetch live profile from GET /api/profile via StudentDataContext (keeps Sidebar & Profile synced)
   const loadProfile = useCallback(
     async (isRefresh = false) => {
       if (isFetchingRef.current) return;
@@ -69,24 +68,11 @@ export const ProfileScreen: React.FC = () => {
       setError(null);
 
       try {
-        const liveProfile = await api.profile.getProfile();
+        const liveProfile = await fetchProfile();
         if (liveProfile && liveProfile.fullName) {
           setProfile(liveProfile);
-          setStudentProfile((prev) => ({
-            ...prev,
-            ...liveProfile,
-          }));
-
-          // Persist snapshot to SWR cache in background
-          void (async () => {
-            try {
-              const session = await storage.getStudentSession();
-              const studentId = session?.studentId ?? session?.userId ?? 'default';
-              await storage.setCache(`kreativa_cache_profile_${studentId}`, liveProfile);
-            } catch {
-              // ignore cache write error
-            }
-          })();
+        } else if (!profile?.fullName && !studentProfile?.fullName) {
+          setError('Failed to load profile from server.');
         }
       } catch (err: any) {
         console.warn('[Profile Load Error]', err?.message || err);
@@ -97,7 +83,7 @@ export const ProfileScreen: React.FC = () => {
         setRefreshing(false);
       }
     },
-    [setStudentProfile]
+    [fetchProfile, profile?.fullName, studentProfile?.fullName]
   );
 
   // Sync live API and scroll to top on focus / blur

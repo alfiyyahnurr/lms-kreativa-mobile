@@ -29,6 +29,7 @@ import {
 } from '../../types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, API_BASE_URL } from '../../services/api';
+import { useStudentData } from '../../context/StudentDataContext';
 import AssignmentDetailView from '../assignments/AssignmentDetailView';
 import SessionDetailView from './SessionDetailView';
 import LearnItemView from './LearnItemView';
@@ -52,6 +53,7 @@ const PRE_POST_OPTIONS: { key: PrePostOption; label: string }[] = [
 ];
 
 export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ course, onBack }) => {
+  const { coursesAcademicYearId, studentProfile } = useStudentData();
   const isSelfPaced = course.course_format === 'self_paced';
 
   // Navigation states
@@ -354,7 +356,10 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ course, onBa
       ...session,
       courseName: course.name || course.subject_name || 'Course',
       classCode: course.class_name || course.class || 'Class',
-      academicYear: '2026/2027',
+      academicYear:
+        coursesAcademicYearId != null
+          ? `Academic Year ${coursesAcademicYearId}`
+          : studentProfile?.academicYearName || '',
       beforeClass: {
         activityType: session.pre_learning_type || (preEnabled ? 'Pre-Learning' : 'None'),
         duration: session.pre_learning_minutes ? `${session.pre_learning_minutes} mins` : (preEnabled ? '15 mins' : '—'),

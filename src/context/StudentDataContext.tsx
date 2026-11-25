@@ -56,6 +56,7 @@ interface StudentDataContextType {
   // Profile & Points
   studentProfile: StudentProfile;
   setStudentProfile: (profile: StudentProfile | ((prev: StudentProfile) => StudentProfile)) => void;
+  fetchProfile: () => Promise<Partial<StudentProfile> | null>;
   pointsHistory: PointHistoryItem[];
   addHabitPoints: (dateKey: string) => void;
   revokeHabitPoints: (dateKey: string) => void;
@@ -82,6 +83,7 @@ interface StudentDataContextType {
 
   // Courses & Academic Data (API-ready getters)
   courses: Course[];
+  coursesAcademicYearId: number | null;
   isCoursesLoading: boolean;
   fetchCourses: (isRefresh?: boolean) => Promise<Course[]>;
   assignments: Assignment[];
@@ -181,6 +183,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // Live Courses State & Mutex Lock
   const [courses, setCourses] = useState<Course[]>([]);
+  const [coursesAcademicYearId, setCoursesAcademicYearId] = useState<number | null>(null);
   const [isCoursesLoading, setIsCoursesLoading] = useState<boolean>(false);
   const coursesRef = useRef<Course[]>([]);
   coursesRef.current = courses;
@@ -193,7 +196,10 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       setIsCoursesLoading(true);
     }
     try {
-      const liveCourses = await api.courses.list();
+      const { academicYearId, courses: liveCourses } = await api.courses.listWithMeta();
+      if (academicYearId != null) {
+        setCoursesAcademicYearId(academicYearId);
+      }
       if (Array.isArray(liveCourses)) {
         setCourses(liveCourses);
         coursesRef.current = liveCourses;
@@ -201,6 +207,9 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
           const session = await storage.getStudentSession();
           const studentId = session?.studentId ?? session?.userId ?? 'default';
           await storage.setCache(`kreativa_cache_courses_${studentId}`, liveCourses);
+          if (academicYearId != null) {
+            await storage.setCache(`kreativa_cache_courses_year_${studentId}`, academicYearId);
+          }
         } catch {
           // ignore cache write errors
         }
@@ -251,13 +260,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       await fetchDashboardData();
 
       // Sync student profile from live backend API
-      const liveProfile = await api.profile.getProfile();
-      if (liveProfile && liveProfile.fullName) {
-        setStudentProfile((prev) => ({
-          ...prev,
-          ...liveProfile,
-        }));
-      }
+      await fetchProfile();
 
       // Sync announcements from live backend API
       try {
@@ -300,6 +303,37 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Dynamic points history list (starts with static historical logs from Oct 13, 14, 15)
   const [pointsHistory, setPointsHistory] = useState<PointHistoryItem[]>(INITIAL_POINTS_HISTORY);
 
+  // Live Profile Fetcher with Mutex Lock (Single Source of Truth for Sidebar & ProfileScreen)
+  const isProfileFetchingRef = useRef<boolean>(false);
+  const fetchProfile = useCallback(async (): Promise<Partial<StudentProfile> | null> => {
+    if (isProfileFetchingRef.current) return null;
+    isProfileFetchingRef.current = true;
+    try {
+      const liveProfile = await api.profile.getProfile();
+      if (liveProfile && liveProfile.fullName) {
+        setStudentProfile((prev) => {
+          const merged = { ...prev, ...liveProfile };
+          void (async () => {
+            try {
+              const studentId = merged.studentId ?? merged.userId ?? 'default';
+              await storage.setCache(`kreativa_cache_profile_${studentId}`, liveProfile);
+              await storage.setStudentSession(merged);
+            } catch {
+              // ignore cache/session write error
+            }
+          })();
+          return merged;
+        });
+        return liveProfile;
+      }
+    } catch (err: any) {
+      console.warn('[Profile Fetch Warning]', err?.message || err);
+    } finally {
+      isProfileFetchingRef.current = false;
+    }
+    return null;
+  }, []);
+
   // Student Profile State (starts with D 0, L 6, H 8 -> 14 pts)
   const [studentProfile, setStudentProfile] = useState<StudentProfile>(STUDENT_PROFILE);
 
@@ -323,9 +357,15 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
             academicYearName: saved.academicYearName ?? prev.academicYearName,
           }));
 
-          // SWR: Instant Dashboard & Literacy Cache Hydration (<0.05s startup)
+          // SWR: Instant Profile, Dashboard & Literacy Cache Hydration (<0.05s startup)
           try {
             const studentId = saved.studentId ?? saved.userId ?? 'default';
+            const cachedProfile = await storage.getCache<Partial<StudentProfile>>(
+              `kreativa_cache_profile_${studentId}`
+            );
+            if (cachedProfile && cachedProfile.fullName) {
+              setStudentProfile((prev) => ({ ...prev, ...cachedProfile }));
+            }
             const cachedDashboard = await storage.getCache<DashboardData>(`kreativa_cache_dashboard_${studentId}`);
             if (cachedDashboard) {
               setDashboardData(cachedDashboard);
@@ -340,13 +380,20 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
               setCourses(cachedCourses);
               coursesRef.current = cachedCourses;
             }
+            const cachedCoursesYear = await storage.getCache<number>(`kreativa_cache_courses_year_${studentId}`);
+            if (cachedCoursesYear != null) {
+              setCoursesAcademicYearId(cachedCoursesYear);
+            }
           } catch {
             // ignore
           }
+
+          // Background live sync from GET /api/profile so Sidebar immediately reflects DB
+          void fetchProfile();
         }
       })
       .catch(() => {});
-  }, []);
+  }, [fetchProfile]);
 
   // Fetch live habit records for a specific yearMonth from backend API
   const fetchHabitsMonth = useCallback(async (yearMonth: string) => {
@@ -885,6 +932,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       value={{
         studentProfile,
         setStudentProfile,
+        fetchProfile,
         pointsHistory,
         addHabitPoints,
         revokeHabitPoints,
@@ -903,6 +951,7 @@ export const StudentDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
         showToast,
         dismissToast,
         courses,
+        coursesAcademicYearId,
         isCoursesLoading,
         fetchCourses,
         assignments: ASSIGNMENTS_DATA,

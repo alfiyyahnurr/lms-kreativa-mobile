@@ -595,13 +595,17 @@ export const api = {
   // 4. COURSES
   // ==========================================
   courses: {
-    // GET {{baseUrl}}/api/courses
-    list: async (): Promise<Course[]> => {
+    // GET {{baseUrl}}/api/courses (returns { academicYearId, studentId, courses })
+    listWithMeta: async (): Promise<{ academicYearId: number | null; courses: Course[] }> => {
       try {
         const res = await requestApi<any>('/api/courses', 'GET', undefined, null);
         const rawList = res?.courses || (Array.isArray(res) ? res : []);
+        const academicYearId =
+          res?.academicYearId != null && !isNaN(Number(res.academicYearId))
+            ? Number(res.academicYearId)
+            : null;
         if (Array.isArray(rawList)) {
-          return rawList.map((c: any) => ({
+          const courses = rawList.map((c: any) => ({
             id: Number(c.id),
             code: c.subject_code || c.code || 'CRS',
             subject_code: c.subject_code ?? null,
@@ -623,11 +627,18 @@ export const api = {
             enrolled_count: Number(c.enrolled_count) || 0,
             description: c.description ?? null,
           }));
+          return { academicYearId, courses };
         }
       } catch (e) {
         console.warn('[Courses API List Warning]', e);
       }
-      return [];
+      return { academicYearId: null, courses: [] };
+    },
+
+    // GET {{baseUrl}}/api/courses
+    list: async (): Promise<Course[]> => {
+      const { courses } = await api.courses.listWithMeta();
+      return courses;
     },
 
     // GET {{baseUrl}}/api/courses/{{courseId}}

@@ -128,6 +128,7 @@ const ClassCourseCard: React.FC<ClassCourseCardProps> = ({ course, onPress }) =>
 export const CoursesScreen: React.FC = () => {
   const {
     courses,
+    coursesAcademicYearId,
     studentProfile,
     isCoursesLoading,
     fetchCourses,
@@ -239,7 +240,11 @@ export const CoursesScreen: React.FC = () => {
           <View style={styles.headerBox}>
             <Text style={styles.pageTitle}>My Courses</Text>
             <Text style={styles.pageSubtitle}>
-              Academic Year {studentProfile?.academicYearName || '2026/2027'}
+              {coursesAcademicYearId != null
+                ? `Academic Year ${coursesAcademicYearId}`
+                : studentProfile?.academicYearName
+                  ? `Academic Year ${studentProfile.academicYearName}`
+                  : 'Academic Year'}
             </Text>
           </View>
 

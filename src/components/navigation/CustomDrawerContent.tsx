@@ -99,7 +99,7 @@ export const CustomDrawerContent: React.FC<DrawerContentComponentProps> = ({
           />
           <View style={styles.brandTextWrap}>
             <Text style={styles.brandTitle} numberOfLines={2}>
-              {studentProfile?.schoolName || 'Kreativa Global High School'}
+              {studentProfile?.schoolName || ''}
             </Text>
             <Text style={styles.brandSubtitle}>Student Portal</Text>
           </View>
