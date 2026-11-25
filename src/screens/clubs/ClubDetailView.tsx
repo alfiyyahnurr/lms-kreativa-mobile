@@ -11,6 +11,7 @@ import {
   Linking,
 } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, API_BASE_URL } from '../../services/api';
 import { storage } from '../../services/storage';
 import { ClubDetailData, ClubItem, ClubReportItem } from '../../types';
@@ -63,6 +64,24 @@ function collectPhotos(r: ClubReportItem): string[] {
     }
   }
   return photos;
+}
+
+function formatSessionDate(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  try {
+    const raw = String(dateStr).trim();
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    }
+    return raw.slice(0, 10);
+  } catch {
+    return String(dateStr).slice(0, 10);
+  }
 }
 
 export const ClubDetailView: React.FC<ClubDetailViewProps> = ({
@@ -144,12 +163,14 @@ export const ClubDetailView: React.FC<ClubDetailViewProps> = ({
   const materials = detail?.materials || [];
   const scores = detail?.scores || [];
   const reports = detail?.reports || [];
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, 16) + 110;
 
   return (
     <ScrollView
       ref={scrollRef}
       style={styles.container}
-      contentContainerStyle={styles.contentContainer}
+      contentContainerStyle={[styles.contentContainer, { paddingBottom: bottomPadding }]}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
@@ -231,7 +252,7 @@ export const ClubDetailView: React.FC<ClubDetailViewProps> = ({
                       <Text style={styles.reportDateSession}>
                         {formattedDate}
                         {r.session_title
-                          ? ` · Session: ${r.session_title}${r.session_date ? ` (${r.session_date})` : ''}`
+                          ? ` · Session: ${r.session_title}${r.session_date ? ` (${formatSessionDate(r.session_date)})` : ''}`
                           : ''}
                       </Text>
 
@@ -277,7 +298,7 @@ export const ClubDetailView: React.FC<ClubDetailViewProps> = ({
                   <View key={String(s.id)} style={styles.itemCard}>
                     <Text style={styles.itemTitle}>{s.title}</Text>
                     <Text style={styles.itemMeta}>
-                      {s.session_date}
+                      {formatSessionDate(s.session_date)}
                       {s.start_time ? ` · ${String(s.start_time).slice(0, 5)}` : ''}
                       {s.end_time ? `–${String(s.end_time).slice(0, 5)}` : ''}
                       {s.location ? ` · ${s.location}` : ''}

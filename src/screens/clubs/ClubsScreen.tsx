@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { Trophy, Image as ImageIcon } from 'lucide-react-native';
 import { api, API_BASE_URL } from '../../services/api';
@@ -170,6 +170,9 @@ export const ClubsScreen: React.FC = () => {
     setSelectedClubId(clubId);
   };
 
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, 16) + 110;
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <AppHeader
@@ -190,7 +193,7 @@ export const ClubsScreen: React.FC = () => {
         <ScrollView
           ref={scrollRef}
           style={styles.container}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[styles.contentContainer, { paddingBottom: bottomPadding }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
